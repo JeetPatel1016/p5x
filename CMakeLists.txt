@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(P5X VERSION 0.1.0 LANGUAGES C CXX)
+project(P5X VERSION 0.1.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,7 @@ set(SRC "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 # --------------------------------------------------------------------------------------------------
 # p5x_dsp: standard library only (docs/00-architecture.md § Dependency rules)
 add_library(p5x_dsp STATIC
+    ${SRC}/dsp/OutputStage.h
     ${SRC}/dsp/Random.h
     ${SRC}/dsp/Smoother.h
     ${SRC}/dsp/Voice.h

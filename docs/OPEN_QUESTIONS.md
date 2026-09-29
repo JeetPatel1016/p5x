@@ -23,7 +23,6 @@
 | 24 | Saw aliasing test is ambiguous (a 1 kHz saw, or a sweep up to C8?), and −80 dB is likely out of reach for 2-sample PolyBLEP at 2×. Rec.: measure in milestone 2, then set the threshold with the user | as in 02-oscillators.md | milestone 2 |
 | 25 | Filter sweep test "20 Hz → 20 kHz at 1 000 Hz rate": does that mean one sweep every 1 ms? | unspecified | milestone 2 |
 | 26 | Filter keyboard tracking uses which note: the glided note, and does it include bend? Rec.: glided note, no bend | unspecified | milestone 2 |
-| 27 | Safety clipper formula isn't continuous as written (tanh(0.8) = 0.66, not 0.8). Rec.: for \|x\| > 0.8, y = sign(x)·(0.8 + 0.2·tanh((\|x\| − 0.8)/0.2)), which is continuous in value and slope and peaks at ±1 | as in 06-voices.md | milestone 2 |
 | 28 | Poly-Mod Osc B source is labelled ±1, but B's raw summed waveform reaches ±3 with all shapes on (02 doesn't normalise). Rec.: use the raw sum and fix the label | raw sum | milestone 3 |
 | 29 | Glide for a voice's very first note (no previous note). Rec.: no glide | unspecified | milestone 4 |
 | 30 | Unison with the sustain pedal: does the note stack keep pedal-held notes? | unspecified | milestone 4 |

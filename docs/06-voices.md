@@ -12,7 +12,7 @@ Per internal sample:
 6. Filter (cutoff per 03-filter.md).
 7. VCA: `× ampEnv × velocityGain`.
 8. DC blocker: one-pole high-pass at 5 Hz.
-9. Add to the shared oversampled buffer × **voice gain 0.3** (P5X headroom: 5 voices of full saw stay mostly below 0 dBFS).
+9. Add to the shared oversampled buffer × **voice gain 0.2** (P5X headroom: a 5-voice chord of full-level voices peaks around −1 to −0.5 dBFS; more voices are caught by the safety clipper).
 
 ## Voice count
 - `perf_voices` = 5 / 8 / 10. Allocate 10 voices always; the parameter sets how many are active.
@@ -57,7 +57,7 @@ At Vintage = 0 every offset is exactly 0 and output is identical to a "perfect" 
 
 ## Output stage (after downsampling, host rate)
 1. `× master_volume` (dB → gain, −60 dB = 0).
-2. **Safety clipper:** `y = tanh(x)` for |x| > 0.8, identity below, with a continuous transition (P5X; keeps a runaway patch from reaching the host at full scale). Log WARN when engaged (rate-limited 1/s). (Formula open: OPEN_QUESTIONS #27.)
+2. **Safety clipper:** identity for |x| ≤ 0.8; above that `y = sign(x) · (0.8 + 0.2 · tanh((|x| − 0.8) / 0.2))`, continuous in value and slope, never beyond ±1.0 (P5X; keeps a runaway patch or a dense chord at full master volume from hard-clipping at the host or sound card). Log WARN when engaged (rate-limited 1/s). In place since 0.1.1 (`dsp/OutputStage.h`).
 3. Mono → both output channels.
 
 ## Oversampling modes

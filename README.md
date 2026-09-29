@@ -2,7 +2,7 @@
 
 A polyphonic virtual-analog synthesizer for Windows (VST3 + Standalone), by Jeet Patel.
 
-Status: **milestone 1** (skeleton + test harness). Notes play a placeholder sine; the real voice
+Status: **milestone 1** (skeleton + test harness), version 0.1.1. Notes play a placeholder sine; the real voice
 arrives in milestone 2. See `CLAUDE.md` and `docs/` for the full plan and specs.
 
 ## Building

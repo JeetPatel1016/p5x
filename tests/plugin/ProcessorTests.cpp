@@ -55,7 +55,7 @@ TEST_CASE ("Processor: sine per note, both channels, correct pitch", "[plugin][p
     juce::MidiBuffer none;
     f.processor.processBlock (out, none);
 
-    REQUIRE (peak (out) == Approx (0.3f).margin (0.01));
+    REQUIRE (peak (out) == Approx (0.2f).margin (0.01));
     REQUIRE (frequency (out, kRate) == Approx (440.0).epsilon (0.002));
 
     for (int i = 0; i < out.getNumSamples(); ++i)
@@ -333,5 +333,56 @@ TEST_CASE ("Processor: odd block sizes, including 0 and larger than prepared", "
 
         for (int i = 0; i < size; ++i)
             REQUIRE (std::isfinite (out.getSample (0, i)));
+    }
+}
+
+TEST_CASE ("Processor: chords never reach full scale; the safety clipper catches 10 voices", "[plugin][processor]")
+{
+    waitForFreshRateWindow();
+
+    auto chordPeak = [] (P5XAudioProcessor& p, std::initializer_list<int> notes)
+    {
+        juce::MidiBuffer midi;
+
+        for (int n : notes)
+            midi.addEvent (MidiMessage::noteOn (1, n, (juce::uint8) 100), 0);
+
+        juce::AudioBuffer<float> buffer (2, kBlock);
+        p.processBlock (buffer, midi);
+        float result = peak (buffer);
+
+        for (int block = 0; block < 500; ++block) // 5 s
+        {
+            juce::MidiBuffer none;
+            p.processBlock (buffer, none);
+            result = std::max (result, peak (buffer));
+        }
+
+        return result;
+    };
+
+    {
+        // A triad stays below the clipper threshold entirely.
+        Prepared f;
+        logLines (f.processor, f.logPosition);
+        REQUIRE (chordPeak (f.processor, { 60, 64, 67 }) <= 0.8f);
+        REQUIRE_FALSE (containsLine (logLines (f.processor, f.logPosition), "Safety clipper engaged"));
+    }
+
+    {
+        // Five voices: peaks may touch the knee, but nothing reaches full scale.
+        Prepared f;
+        REQUIRE (chordPeak (f.processor, { 60, 61, 62, 63, 64 }) < 1.0f);
+    }
+
+    {
+        Prepared f;
+        setParam (f.processor, "perf_voices", 2.0f); // "10"
+        process (f.processor, kBlock);
+        waitForFreshRateWindow(); // the 5-voice case above may have used this second's WARN
+        logLines (f.processor, f.logPosition);
+
+        REQUIRE (chordPeak (f.processor, { 48, 52, 55, 60, 64, 67, 72, 76, 79, 84 }) < 1.0f);
+        REQUIRE (containsLine (logLines (f.processor, f.logPosition), "WARN Safety clipper engaged"));
     }
 }

@@ -15,6 +15,7 @@ set(SUPPORT_SOURCES
 
 # --------------------------------------------------------------------------------------------------
 set(UNIT_TEST_SOURCES
+    dsp/OutputStageTests.cpp
     dsp/RandomTests.cpp
     dsp/SmootherTests.cpp
     dsp/VoiceTests.cpp

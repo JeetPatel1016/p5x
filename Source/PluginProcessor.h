@@ -3,6 +3,7 @@
 
 #include "debug/LogService.h"
 #include "debug/Telemetry.h"
+#include "dsp/OutputStage.h"
 #include "dsp/Smoother.h"
 #include "dsp/Voice.h"
 #include "dsp/VoiceAllocator.h"

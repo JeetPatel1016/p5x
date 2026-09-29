@@ -292,6 +292,10 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
         for (int i = 0; i < n; ++i)
             scratch[(size_t) i] *= gain[(size_t) i];
 
+        // Output stage (06-voices.md): master volume, then the safety clipper.
+        if (dsp::SafetyClipper::processBlock (scratch.data(), n))
+            P5X_LOG_RATE (Warn, 1, Engine, instanceId, "Safety clipper engaged (output above -1.9 dBFS)");
+
         if (testToneRemaining > 0)
         {
             const double increment = 440.0 / currentSampleRate;

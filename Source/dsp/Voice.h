@@ -4,7 +4,7 @@
 namespace p5x::dsp
 {
 // Milestone 1 placeholder voice: one sine per note with a fixed linear envelope (5 ms attack,
-// 100 ms release), voice gain 0.3, velocity ignored (see DECISIONS.md, "Milestone 1 placeholder
+// 100 ms release), voice gain 0.2 (06-voices.md), velocity ignored (see DECISIONS.md, "Milestone 1 placeholder
 // voice"). Milestone 2 replaces the internals with oscillators, filter and envelopes (06-voices.md).
 class Voice
 {
@@ -19,7 +19,7 @@ public:
 
     static constexpr double kAttackSeconds = 0.005;
     static constexpr double kReleaseSeconds = 0.1;
-    static constexpr float kVoiceGain = 0.3f;
+    static constexpr float kVoiceGain = 0.2f; // 06-voices.md § Voice structure, step 9
 
     void prepare (double sampleRate) noexcept;
     void reset() noexcept;
