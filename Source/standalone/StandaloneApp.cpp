@@ -217,24 +217,32 @@ public:
         const auto savedSetup = properties->getXmlValue ("audioSetup");
         const auto savedDevice = savedSetup != nullptr ? savedSetup->getStringAttribute ("audioOutputDeviceName") : juce::String();
 
-        const juce::Array<juce::StandalonePluginHolder::PluginInOuts> channels { { 0, 2 } };
+        juce::Array<juce::StandalonePluginHolder::PluginInOuts> channels;
+        channels.add ({ 0, 2 }); // no inputs until "Route input into filter" (milestone 2), stereo out
         holder = std::make_unique<juce::StandalonePluginHolder> (properties.get(), false, juce::String(), nullptr,
                                                                  channels, false);
 
         auto& deviceManager = holder->deviceManager;
         const auto id = static_cast<P5XAudioProcessor&> (*holder->processor).getInstanceId();
 
-        // During app start-up the holder's first initialise() can return before the Windows device lists
-        // are ready, leaving no device open. Retrying with the same saved setup opens it (and keeps the
-        // user's choice); JUCE falls back to the default device itself if the saved one can't open.
-        if (deviceManager.getCurrentAudioDevice() == nullptr)
-            deviceManager.initialise (0, 2, savedSetup.get(), true);
-
-        // Crash safety: never exit without audio; log WARN when the saved device couldn't be used.
-        if (deviceManager.getCurrentAudioDevice() == nullptr)
+        // Crash safety (10-debug-and-harness.md): if the saved device can't be opened or isn't running,
+        // fall back to the default device and log WARN; never exit.
+        auto isRunning = [&deviceManager]
         {
+            auto* device = deviceManager.getCurrentAudioDevice();
+            return device != nullptr && device->isOpen() && device->isPlaying();
+        };
+
+        if (! isRunning())
+        {
+            auto* failed = deviceManager.getCurrentAudioDevice();
+            const auto name = failed != nullptr ? failed->getName() : savedDevice;
+            const auto reason = failed != nullptr ? failed->getLastError() : juce::String();
+
+            deviceManager.closeAudioDevice();
             deviceManager.initialiseWithDefaultDevices (0, 2);
-            P5X_LOG (Warn, Standalone, id, "No audio device could be opened; trying the default device");
+            P5X_LOG (Warn, Standalone, id, "Audio device '%s' didn't start%s%s; trying the default device",
+                     name.toRawUTF8(), reason.isNotEmpty() ? ": " : "", reason.toRawUTF8());
         }
         else if (savedDevice.isNotEmpty() && deviceManager.getCurrentAudioDevice()->getName() != savedDevice)
         {
@@ -242,7 +250,10 @@ public:
                      deviceManager.getCurrentAudioDevice()->getName().toRawUTF8());
         }
 
-        if (auto* device = deviceManager.getCurrentAudioDevice())
+        if (! isRunning())
+            P5X_LOG (Error, Standalone, id, "No audio device is running; choose one in Settings");
+
+        if (auto* device = deviceManager.getCurrentAudioDevice(); device != nullptr && isRunning())
             P5X_LOG (Info, Standalone, id, "Audio: %s / %s, %.0f Hz, %d samples", device->getTypeName().toRawUTF8(),
                      device->getName().toRawUTF8(), device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
 
