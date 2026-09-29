@@ -5,15 +5,16 @@
 Source/
   PluginProcessor.*       host glue: params, state, processBlock orchestration
   PluginEditor.*          top-level UI component
+  AppPaths.*              %APPDATA%/P5X locations (tests redirect them with P5X_DATA_DIR)
   params/                 ParameterIDs.h, ParameterLayout.cpp (see 01-parameters.md)
   dsp/                    Random, Smoother, Oscillator, Noise, LadderFilterCEM, (LadderFilterSSM), Envelope,
                           LFO, PolyMod, Voice, VoiceAllocator, Vintage, OutputStage
   midi/                   MidiHandler, MidiLearn, MidiMonitor
   presets/                PresetManager, FactoryPresets
-  debug/                  DebugLog, LogFileSink, Telemetry, DebugConsole
+  debug/                  DebugLog, MpscRing, LogFileSink, LogService, Telemetry, DebugConsole
   ui/                     LookAndFeelP5X, ImageKnob, ImageButton4, ImageWheel, RealKeyboard, PresetDisplay
                           (milestones 1–4 only: PlaceholderPanel, OnScreenKeyboard; deleted in milestone 5)
-  standalone/             StandaloneApp, SettingsDialog, ComputerKeyboardInput
+  standalone/             StandaloneApp, StandaloneServices, SettingsDialog, ComputerKeyboardInput
 tests/                    Catch2 tests, one file per dsp/midi module + golden renders
 art/                      layout.json, style.json, Blender scripts; see 13-art-pipeline.md (concept images live outside the repo in ../artwork/concepts/)
 Resources/ui/1x, 2x/      rendered PNGs (committed), bundled via BinaryData

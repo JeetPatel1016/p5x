@@ -1,12 +1,12 @@
 # 10 · Debug console and Standalone test harness
 
 ## Logging
-- API (callable from any thread): `P5X_LOG(level, fmt, args...)`, levels ERROR, WARN, INFO, DEBUG.
+- API (callable from any thread): `P5X_LOG(level, source, instanceId, fmt, args...)`, levels ERROR, WARN, INFO, DEBUG (e.g. `P5X_LOG (Warn, Engine, instanceId, "Voice %d stolen", v)`).
 - Entry: POD struct `{ uint64 timeMs; uint16 instanceId; uint8 level; uint8 source; char text[120]; }`. `source` is the subsystem: `engine` (processor audio path: voices, steals, clipper), `midi`, `learn`, `state`, `ui`, `standalone`, `log` (the logger itself, e.g. drop counts). `instanceId` is the plugin instance's number in the process (1, 2, …); 0 = global, not tied to an instance. Formatting uses a fixed-size `snprintf` into `text`; no allocation. Longer text is truncated.
 - Any thread other than the message thread (audio threads of every instance, host worker threads): pushes into a lock-free bounded multi-producer ring of 2 048 entries (per-slot sequence numbers, written from scratch; `AbstractFifo` is single-producer and can't be used here). If full, the entry is dropped and a `dropped` counter increments (reported as WARN by the drainer).
 - Message thread: logs go into a second FIFO of the same type (so ordering and formatting are identical).
 - The logger is process-wide: shared by all plugin instances, created with the first and destroyed with the last. One drainer per process (30 Hz timer) moves entries to a shared ring of the last 5 000 and to the file sink (each line includes the instance id). Each instance's console shows its own entries plus global ones.
-- **Rate limiting:** call sites that can repeat per block (voice steals, clipper, pickup) use `P5X_LOG_RATE(level, perSecond, ...)`.
+- **Rate limiting:** call sites that can repeat per block (voice steals, clipper, pickup) use `P5X_LOG_RATE(level, perSecond, source, instanceId, fmt, args...)`.
 - **DEBUG level** is compiled out in Release builds (macro expands to nothing) except when `P5X_VERBOSE=1` is set at build time.
 - File sink: `%APPDATA%/P5X/logs/p5x-YYYY-MM-DD.log`, append, rotating, keep 5 files. Written by the message thread only.
 
