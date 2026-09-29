@@ -1,0 +1,39 @@
+{
+  "_note": "Locked 2026-09-29 from Direction C, reference ../artwork/concepts/direction-3.jpg. Hex values were sampled from that render and are starting points for Blender materials; match the reference by eye. Changing any value needs the user's approval (log in docs/DECISIONS.md).",
+  "reference": "../artwork/concepts/direction-3.jpg",
+  "panel": {
+    "material": "anodized aluminium, fine bead-blasted matte texture",
+    "color": "#404140",
+    "finish": "matte, very low specular, faint micro-grain",
+    "sections": "thin rounded-rectangle outlines (~1.5 px @1x, radius ~8 px) in the print colour; section title sits centred on the top edge, breaking the line"
+  },
+  "cheeks": {
+    "material": "light oak, straight grain, matte oiled finish, softly rounded edges",
+    "color": "#C09E76"
+  },
+  "knob": {
+    "body": "solid machined aluminium, cylindrical, fine vertical knurling on the side",
+    "cap": "satin aluminium top with concentric brushed finish, slight dome",
+    "cap_color": "#ACACAB",
+    "indicator": "black engraved line from centre to edge",
+    "sizes": { "standard": "every knob except Filter Cutoff", "large": "Filter Cutoff only" }
+  },
+  "button": {
+    "cap": "square, whole cap is backlit (no separate LED dot), thin dark bezel",
+    "on_color": "#EEC985",
+    "on_glow": "warm amber, soft bloom just past the cap edge",
+    "off_color": "#1A1A1A",
+    "off": "dark smoked cap, faint reflection, no glow"
+  },
+  "display": {
+    "type": "3-digit red-orange 7-segment LED readout in a small dark recessed window, top centre",
+    "segment_color": "#FF8A1F",
+    "unlit_segments": "faintly visible"
+  },
+  "print": {
+    "font": "Kode Mono, UPPERCASE, letter-spacing ~0.05 em: section titles SemiBold ~16 px @1x, control labels Medium ~11 px @1x",
+    "color": "#C8C8C6",
+    "accent": "#EEC985"
+  },
+  "lighting": "soft studio key from the top left, gentle contact shadows under knobs and buttons"
+}
