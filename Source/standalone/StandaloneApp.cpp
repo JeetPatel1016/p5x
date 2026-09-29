@@ -3,14 +3,16 @@
 // Custom Standalone app (JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP): the test harness from
 // 10-debug-and-harness.md. Reuses JUCE's StandalonePluginHolder for the device and plugin plumbing.
 
-#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
-
 #include "AppPaths.h"
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "standalone/ComputerKeyboardInput.h"
 #include "standalone/StandaloneServices.h"
 #include "ui/LookAndFeelP5X.h"
+
+// JUCE's standalone holder header isn't self-contained: the module headers must come first.
+#include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
 namespace p5x::standalone
 {
@@ -39,7 +41,7 @@ public:
 
         computerKeyboardEnabled = properties.getBoolValue ("computerKeyboard", true);
 
-        editor.reset (holder.processor->createEditorIfNeeded());
+        editor.reset (holder.processor->createEditorAndMakeActive());
         setContentNonOwned (editor.get(), true);
         setResizable (false, false);
 
@@ -222,22 +224,23 @@ public:
         auto& deviceManager = holder->deviceManager;
         const auto id = static_cast<P5XAudioProcessor&> (*holder->processor).getInstanceId();
 
-        // Crash safety: a saved device that fails to open falls back to the default, never exits.
+        // During app start-up the holder's first initialise() can return before the Windows device lists
+        // are ready, leaving no device open. Retrying with the same saved setup opens it (and keeps the
+        // user's choice); JUCE falls back to the default device itself if the saved one can't open.
+        if (deviceManager.getCurrentAudioDevice() == nullptr)
+            deviceManager.initialise (0, 2, savedSetup.get(), true);
+
+        // Crash safety: never exit without audio; log WARN when the saved device couldn't be used.
         if (deviceManager.getCurrentAudioDevice() == nullptr)
         {
             deviceManager.initialiseWithDefaultDevices (0, 2);
-            P5X_LOG (Warn, Standalone, id, "Audio device failed to open; trying the default device");
+            P5X_LOG (Warn, Standalone, id, "No audio device could be opened; trying the default device");
         }
         else if (savedDevice.isNotEmpty() && deviceManager.getCurrentAudioDevice()->getName() != savedDevice)
         {
             P5X_LOG (Warn, Standalone, id, "Saved audio device '%s' failed to open; using '%s'", savedDevice.toRawUTF8(),
                      deviceManager.getCurrentAudioDevice()->getName().toRawUTF8());
         }
-
-        // First launch: enable every MIDI input so the KeyLab plays straight away.
-        if (savedSetup == nullptr)
-            for (const auto& device : juce::MidiInput::getAvailableDevices())
-                deviceManager.setMidiInputDeviceEnabled (device.identifier, true);
 
         if (auto* device = deviceManager.getCurrentAudioDevice())
             P5X_LOG (Info, Standalone, id, "Audio: %s / %s, %.0f Hz, %d samples", device->getTypeName().toRawUTF8(),

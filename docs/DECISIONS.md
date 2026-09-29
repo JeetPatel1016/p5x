@@ -46,3 +46,4 @@ Append-only. Each entry: date · decision · reason. Changing a decision means a
 | 2026-09-29 | Mapped-control tooltip uses 08's format with real units: `Cutoff · 1850 Hz · CC 74` (resolves #18) | One format everywhere |
 | 2026-09-29 | Log entries carry `instanceId` (0 = global) and a defined `source` subsystem; the logger is process-wide and each console shows its own instance plus global entries (resolves #19) | Several instances share one process and log |
 | 2026-09-29 | State `version` missing, non-numeric or < 1 → defaults; newer → parsed tolerantly with a WARN (resolves #20) | Don't throw away a newer project's settings |
+| 2026-09-29 | Robustness test: 5 s of audio per rate × block-size case in every build (supersedes 60 s; resolves OPEN_QUESTIONS #36) | 60 s per case (~20 min of audio) is too slow for routine runs |

@@ -305,6 +305,12 @@ TEST_CASE ("MidiLearn: a UI change arms pickup, the CC's own echo does not", "[m
 
     REQUIRE (sendCc (learn, params, 74, 72).outcome == Outcome::Applied);
 
+    while (learn.popHostUpdate (update))
+    {
+        learn.parameterChangedExternally (update.paramIndex, update.value);
+        learn.hostUpdateApplied (update.paramIndex);
+    }
+
     // The user moves the on-screen control far away.
     learn.parameterChangedExternally (cutoff, 0.1f);
     params.values[cutoff] = 0.1f;

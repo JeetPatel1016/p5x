@@ -129,8 +129,8 @@ TEST_CASE ("MidiHandler: CC 122 and 124-127 have no function", "[midi]")
     MidiHandler h;
     RecordingSink sink;
 
-    for (uint8_t cc : { 122, 124, 125, 126, 127 })
-        send (h, sink, { 0xB0, cc, 0 });
+    for (int cc : { 122, 124, 125, 126, 127 })
+        send (h, sink, { 0xB0, (uint8_t) cc, 0 });
 
     // Only the MIDI Learn path sees them (which ignores reserved CCs).
     REQUIRE (sink.events.size() == 5);

@@ -32,4 +32,3 @@
 | 33 | `bend_range` is a host parameter, so 09 puts it in presets, yet it's set in the Settings dialog next to instance settings. Should presets carry it? | in presets | milestone 6 |
 | 34 | Factory presets: is `Init` one of the 40 (indices 000–039, i.e. 39 patches + Init) or extra? | unspecified | milestone 6 |
 | 35 | Preset file values for Bool and Choice params: "real units" isn't defined for them. Rec.: Bool as 0/1, Choice as the option label (`Half`) | unspecified | milestone 6 |
-| 36 | Robustness test length (11-testing.md § Test types 3): 60 s of audio per rate × block-size case is ~20 min of audio per run; in Debug builds that is very slow. Rec.: 60 s per case in Release builds (CI and sign-off), 5 s in Debug builds | 60 s Release / 5 s Debug (as implemented) | milestone 1 sign-off |

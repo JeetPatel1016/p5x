@@ -213,7 +213,7 @@ TEST_CASE ("LogFileSink: line format and keeping the newest 5 files", "[debug][l
     entry.level = (uint8_t) Level::Warn;
     entry.source = (uint8_t) Source::Engine;
     entry.instanceId = 2;
-    std::strcpy (entry.text, "Voice 3 stolen");
+    strcpy_s (entry.text, "Voice 3 stolen");
 
     const auto line = LogFileSink::formatLine (entry);
     REQUIRE (line.contains ("WARN"));

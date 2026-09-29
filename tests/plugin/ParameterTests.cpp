@@ -115,7 +115,7 @@ std::vector<Spec> specTable()
 }
 } // namespace
 
-TEST_CASE ("Parameters: exactly 50 host parameters (01-parameters.md § Total)", "[plugin][params]")
+TEST_CASE ("Parameters: exactly 50 host parameters", "[plugin][params]")
 {
     P5XAudioProcessor processor;
     REQUIRE (processor.getParameters().size() == 50);

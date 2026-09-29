@@ -76,7 +76,11 @@ TEST_CASE ("State: full round trip (params, map, settings, seed)", "[plugin][sta
     for (int i = 0; i < p5x::params::kNumParameters; ++i)
     {
         INFO (p5x::params::kAllIds[(size_t) i]);
-        REQUIRE (b.getParameterByIndex (i)->getValue() == Approx (a.getParameterByIndex (i)->getValue()).margin (1.0e-5));
+        // Compare real values: Bool/Choice/Int parameters snap, so their raw 0–1 values can differ.
+        auto* pa = a.getParameterByIndex (i);
+        auto* pb = b.getParameterByIndex (i);
+        const float expected = pa->convertFrom0to1 (pa->getValue());
+        REQUIRE (pb->convertFrom0to1 (pb->getValue()) == Approx (expected).epsilon (1.0e-4).margin (1.0e-5));
     }
 
     REQUIRE (b.getMidiLearn().getMap() == a.getMidiLearn().getMap());
@@ -157,12 +161,16 @@ TEST_CASE ("State: fuzzed state XML never crashes", "[plugin][state]")
             mutated = mutated.substring (0, pos) + juce::String::charToString (ch) + mutated.substring (pos + 1);
         }
 
-        if (auto xml = juce::parseXML (mutated))
-        {
-            juce::MemoryBlock block;
-            juce::AudioProcessor::copyXmlToBinary (*xml, block);
-            p.setStateInformation (block.getData(), (int) block.getSize());
-        }
+        // Wrap the raw text in the host-state binary format (magic, length, UTF-8), so malformed XML
+        // reaches our parser too. (JUCE's copyXmlToBinary can't be used here: its single-line writer
+        // crashes on elements that mix text and child elements, which mutations produce.)
+        const auto utf8 = mutated.toStdString();
+        juce::MemoryOutputStream out;
+        out.writeInt (0x21324356);
+        out.writeInt ((int) utf8.size() + 1);
+        out.write (utf8.data(), utf8.size());
+        out.writeByte (0);
+        p.setStateInformation (out.getData(), (int) out.getDataSize());
     }
 
     // Still a working instance.

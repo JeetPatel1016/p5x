@@ -2,8 +2,7 @@
 //
 // 11-testing.md § Test types 3 and 4: random parameters + random MIDI at 44.1/48/96/192 kHz and
 // block sizes 1, 17, 64, 512, 4096: no NaN/Inf, peak < 4.0, and zero allocations inside
-// processBlock after the first block. 60 s of audio per case in Release; 5 s in Debug builds,
-// where the same code runs roughly ten times slower.
+// processBlock after the first block. 5 s of audio per case (DECISIONS.md).
 
 #include "dsp/Random.h"
 #include "plugin/TestProcessor.h"
@@ -13,11 +12,7 @@
 
 namespace
 {
-#if defined(NDEBUG)
-constexpr double kSecondsPerCase = 60.0;
-#else
 constexpr double kSecondsPerCase = 5.0;
-#endif
 
 struct Stats
 {

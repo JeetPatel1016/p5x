@@ -22,7 +22,7 @@ void collectTitles (juce::Component& component, std::multiset<juce::String>& tit
 TEST_CASE ("Placeholder editor: exactly one control per parameter", "[plugin][ui]")
 {
     P5XAudioProcessor processor;
-    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorIfNeeded());
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
     REQUIRE (editor != nullptr);
     REQUIRE (editor->getWidth() > 0);
     REQUIRE (editor->getHeight() > 0);

@@ -8,7 +8,7 @@
 ## Test types
 1. **Unit tests** per module: listed at the end of each doc (02–10 and 13). Every item there must exist as a test.
 2. **Golden renders** (from milestone 2): a fixed MIDI sequence (`tests/data/golden.mid`: chords, legato line, sustain use, bends) rendered offline with seed 1 at 48 kHz for a set of patches. Compared against stored reference WAVs by **RMS per 50 ms window (±0.5 dB)** and **spectral centroid (±3 %)**, not bit-exact. Updating a golden reference requires the user's approval and a DECISIONS.md line.
-3. **Robustness:** random parameter values + random MIDI for 60 s at 44.1, 48, 96, 192 kHz and block sizes 1, 17, 64, 512, 4096: no NaN/Inf, peak < 4.0 before the clipper, no assertion.
+3. **Robustness:** random parameter values + random MIDI for 5 s per case at 44.1, 48, 96, 192 kHz and block sizes 1, 17, 64, 512, 4096: no NaN/Inf, peak < 4.0 before the clipper, no assertion.
 4. **Real-time safety:** in Debug builds, a global allocation counter asserts zero allocations inside `processBlock` (after the first block). Runs under the robustness test.
 5. **Performance:** 5 voices, all held, full-saw patch, res 0.8, 2× OS at 48 kHz, block 128: processBlock ≤ 10 % of one core on the CI machine (report the number; fail above 15 %).
 6. **Manual checklist** (below): done by the user with the Standalone app and KeyLab.
