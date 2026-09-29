@@ -13,10 +13,11 @@ All events are processed at their sample offset within the block (see 00-archite
 | CC 120 All Sound Off | all voices reset to Idle immediately (hard cut) |
 | CC 123 All Notes Off | all voices `gateOff()`; sustain state cleared |
 | CC 121 Reset All Controllers | mod wheel 0, bend centre, aftertouch 0, sustain up |
+| CC 122, 124–127 | ignored (reserved, never learnable) |
 | other CCs | routed through MIDI Learn (below); unmapped CCs are ignored (still shown in the monitor) |
 | Channel Pressure | aftertouch, all voices (05-modulation.md) |
 | Poly Pressure | aftertouch for the voice playing that note |
-| Program Change | only if `program_change_enabled`: loads factory/user preset N (0-based index into the preset list). Loading happens on the message thread via async message; the audio thread never loads presets |
+| Program Change | only if `program_change_enabled`: loads factory/user preset N (0-based index into the preset list). Loading happens on the message thread via async message; the audio thread never loads presets. Until presets exist (milestone 6) it's parsed and logged only. Most VST3 hosts don't pass Program Change to plugins as MIDI; revisit at milestone 6 |
 | Everything else (SysEx, clock, etc.) | ignored |
 
 - **Channel filter:** `midi_channel` 0 = Omni, 1–16 = that channel only. Applies to all messages above.
@@ -56,7 +57,7 @@ No CC is mapped to anything out of the box. The user builds their own map from t
 ### Persistence
 - Mappings belong to the instance, not the preset. Loading a preset never changes the map.
 - Stored in plugin state as `<MidiMap><Map cc="74" param="flt_cutoff"/>…</MidiMap>` (by param ID, not index).
-- Settings: `Save as default map` writes `%APPDATA%/P5X/midi-map.xml`; new instances load it if it exists (and the host state doesn't include a map). `Clear all mappings` asks for confirmation.
+- Settings: `Save as default map` writes `%APPDATA%/P5X/midi-map.xml`; new instances load it if it exists and the host state doesn't include a `<MidiMap>` element. An empty `<MidiMap/>` counts as a map, so a cleared map stays cleared. `Clear all mappings` asks for confirmation.
 - Tooltip on mapped controls: `Cutoff · 42% · CC 74`. The debug console lists the full map.
 
 ### Controller notes (KeyLab Essential mk3, for README)

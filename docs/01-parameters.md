@@ -52,7 +52,7 @@ Both envelopes have identical parameters; prefix `fenv_` for the filter envelope
 
 | ID suffix | Name | Type | Range | Default (fenv / aenv) | Unit / curve | Smooth | Source |
 |---|---|---|---|---|---|---|---|
-| `_attack` | Attack | Float | 0.001 … 10 | 0.005 / 0.002 | seconds, log | – (read at segment start and each sample) | P5X range |
+| `_attack` | Attack | Float | 0.001 … 10 | 0.005 / 0.002 | seconds, log | – (read every sample, see 04-envelopes.md) | P5X range |
 | `_decay` | Decay | Float | 0.001 … 15 | 0.60 / 0.50 | seconds, log | – | P5X range |
 | `_sustain` | Sustain | Float | 0 … 1 | 0.40 / 1.00 | level, linear | Lin 20 | HW |
 | `_release` | Release | Float | 0.001 … 15 | 0.30 / 0.20 | seconds, log | – | P5X range |
@@ -90,7 +90,7 @@ Both envelopes have identical parameters; prefix `fenv_` for the filter envelope
 | `perf_unison` | Unison | Bool | | off | | – | P5X |
 | `perf_voices` | Voices | Choice | 5, 8, 10 | 5 | | – (applied when all voices idle, or on next prepare) | P5X |
 | `perf_velocity` | Velocity | Bool | | on | | – | P5X |
-| `perf_aftertouch` | Aftertouch | Bool | | on | adds to Wheel-Mod amount | – | P5X |
+| `perf_aftertouch` | Aftertouch | Bool | | on | raises Wheel-Mod amount: max(wheel, pressure), see 05-modulation.md | – | P5X |
 
 ## Master
 | ID | Name | Type | Range | Default | Unit / curve | Smooth | Source |
@@ -107,6 +107,7 @@ Both envelopes have identical parameters; prefix `fenv_` for the filter envelope
 | `hq_mode` | bool (4× oversampling) | false | Settings |
 | `program_change_enabled` | bool | false | Settings |
 | `seed` | uint64 | random at first construction, then persisted | internal |
+| `scale` | float, window scale 0.75–1.5 | 1.0 | editor resize |
 | `midi_map` | CC → param ID list | empty | MIDI Learn |
 
 ## Total

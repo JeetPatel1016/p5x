@@ -11,7 +11,7 @@
 | Audio device settings | | | Standalone only (`standalone.xml`) |
 | Window scale | | ✓ | |
 
-Global files live in `%APPDATA%/P5X/`.
+Global files live in `%APPDATA%/P5X/`. `settings.xml` is rewritten whenever a setting changes in the Settings dialog.
 
 ## Plugin state format
 `getStateInformation` writes XML (via `copyXmlToBinary`):

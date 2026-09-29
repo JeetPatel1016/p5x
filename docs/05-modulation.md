@@ -36,7 +36,7 @@ Note: ±12 semitones at full wheel is intentionally large (full-throw effect). T
 pm = pm_filt_env * filterEnvLevel(0..1)  +  pm_osc_b * oscBOutput(±1)
 ```
 - Osc B output used here is B's **raw summed waveform** from the current sample (before the mixer level). This allows audio-rate FM, which is the point of Poly-Mod.
-- Filter env source is the same filter envelope level the filter uses (after velocity scaling).
+- Filter env source is the same filter envelope level the filter uses (after velocity scaling, before `flt_env_amt`).
 
 | Toggle | Effect at `pm = 1` |
 |---|---|
@@ -50,7 +50,7 @@ pm = pm_filt_env * filterEnvLevel(0..1)  +  pm_osc_b * oscBOutput(±1)
 ## Velocity (`perf_velocity`)
 When on, with `v = velocity / 127`:
 - Amp: VCA gain × `(0.25 + 0.75 * v)`.
-- Filter env amount: `flt_env_amt × (0.5 + 0.5 * v)` (also affects Poly-Mod's filter env source, since it's the same scaled level).
+- Filter envelope: the envelope's output level is scaled by `(0.5 + 0.5 * v)`. That scaled level feeds both the filter (× `flt_env_amt` × 8 octaves, see 03-filter.md) and Poly-Mod's filter-env source. For the filter this is the same as scaling `flt_env_amt`.
 
 When off, `v` is treated as 1 (full level for every note). Velocity is captured at note-on and fixed for the note.
 
@@ -62,7 +62,7 @@ When off, `v` is treated as 1 (full level for every note). Velocity is captured 
 - A future filter-cutoff destination is an open question; don't implement it.
 
 ## Tests
-- LFO rate 1 Hz: period 1 s ± 0.5 %. Square has no sample-to-sample jump > 1/(0.001 × rate).
+- LFO rate 1 Hz: period 1 s ± 0.5 %. Square has no sample-to-sample jump > 2/(0.001 × rate) (a full −1 → +1 swing spread over 1 ms at the LFO's host rate).
 - Wheel-Mod with wheel 0: no pitch/PW/cutoff change on any destination (bit-identical to wheel-mod off).
 - Wheel 1, `wm_dest_freq_a`, LFO triangle: Osc A pitch swings ±12 st ± 0.1.
 - Poly-Mod Osc B → Freq A with B at 200 Hz, amount 0.3: output spectrum shows FM sidebands at A ± n·200 Hz.

@@ -45,7 +45,7 @@ In order:
 - First note after a voice was idle glides from that voice's last note (hardware behaviour). (Verify; see OPEN_QUESTIONS.)
 
 ## Vintage (`perf_vintage`, 0–1)
-Per voice, drawn once from the seeded `Random` at `prepare` (so it's reproducible across reloads) and scaled by the knob:
+Per voice, drawn once from the seeded `Random` at `prepare` and scaled by the knob. Every `prepare` re-seeds each per-voice `Random` from the instance `seed` and the voice index, so repeated `prepare` calls and reloads give the same values:
 | Offset | At Vintage = 1 |
 |---|---|
 | Static detune Osc A, Osc B (independent) | uniform ±8 cents |

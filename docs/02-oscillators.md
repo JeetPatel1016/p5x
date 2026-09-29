@@ -23,12 +23,16 @@ public:
 ## Pitch
 Per sample, for each voice:
 ```
-noteA = playedNote (after glide) + osc_a_freq + bend + masterTune/100 + vintageDetuneA + wheelMod/polyMod pitch offsets
-freqA = 440 * 2^((noteA - 69) / 12)
+noteA = playedNote (after glide) + osc_a_freq + bend + masterTune/100
+      + unisonDetune/100 + (vintageDetuneA + vintageDriftA)/100 + wheelMod/polyMod pitch offsets
+noteB = playedNote (after glide) + osc_b_freq + osc_b_fine/100 + bend + masterTune/100
+      + unisonDetune/100 + (vintageDetuneB + vintageDriftB)/100 + wheelMod pitch offset
+freqX = 440 * 2^((noteX - 69) / 12)          // then ÷128 for B when Lo Freq is on
+// detunes and drift are in cents (06-voices.md); Poly-Mod pitch goes to A only (05-modulation.md)
 ```
 - `osc_a_freq` / `osc_b_freq` are whole semitones (quantized knob, like the hardware DAC steps).
 - `osc_b_fine` adds cents to B only.
-- **Osc B Kbd off:** B's `playedNote` is replaced with a fixed reference note 60 (C4). Bend, glide and master tune still apply only when Kbd is on; when off, B ignores them too. (Verify.)
+- **Osc B Kbd off:** B's `playedNote` is replaced with a fixed reference note 60 (C4), and B also ignores bend, glide and master tune. The other offsets (`osc_b_freq`, fine, unison, Vintage, Wheel-Mod) still apply. (Verify; OPEN_QUESTIONS #2.)
 - **Osc B Lo Freq on:** B's final frequency is divided by 128 (7 octaves down). Anti-aliasing is unnecessary at that rate but the waveshape code path stays the same. With Kbd off and all offsets 0, B runs at 261.63 / 128 = 2.04 Hz.
 - Clamp final frequency to [0.01 Hz, 0.45 × internalRate].
 
@@ -61,7 +65,7 @@ All waveforms are generated from a `double` phase in [0, 1) advancing by `freq /
 ## Edge cases
 - Frequency jumps (large poly-mod FM) must not produce NaN or phase outside [0,1): wrap with `phase -= floor(phase)`.
 - Negative frequency from extreme modulation is clamped to 0.01 Hz, not reflected (P5X; the hardware exp converter can't go negative).
-- A voice that's idle still does **not** advance oscillators (CPU saving); on reactivation it continues from the stored phase. (Drift of free-running is inaudible here.)
+- An idle voice does **not** advance its oscillators (CPU saving); on reactivation it continues from the stored phase. (Drift of free-running is inaudible here.)
 
 ## Tests
 - Saw at 1 kHz, 96 kHz internal, 2× OS path: aliasing products below −80 dB relative to fundamental up to C8 (4186 Hz). Measure via FFT after downsampling.
