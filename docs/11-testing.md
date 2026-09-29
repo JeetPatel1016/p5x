@@ -18,7 +18,7 @@ Every milestone: builds clean (warnings as errors, `/W4`), all tests pass, plugi
 
 | # | Additional acceptance |
 |---|---|
-| 1 | Sine per note, 5-voice poly with stealing; MIDI table in 07 fully handled; MIDI Learn works on placeholder editor incl. reserved CCs, move, pickup, persistence; Standalone settings, on-screen + computer keyboard; debug console log + MIDI monitor + map; param count test = 50 (all params exist even if DSP ignores them yet) |
+| 1 | Sine per note, 5-voice poly with stealing; MIDI table in 07 fully handled; MIDI Learn works on placeholder editor incl. reserved CCs, move, pickup, persistence; Standalone settings, 61-key on-screen keyboard + computer keyboard, notes outside 36–96 ignored; debug console log + MIDI monitor + map; param count test = 50 (all params exist even if DSP ignores them yet) |
 | 2 | Oscillator, filter, envelope tests from 02–04; output stage; 2× OS; voices table + CPU in console; Standalone `Route input into filter`; first golden renders |
 | 3 | Modulation tests from 05; sync; Lo Freq; scope |
 | 4 | Velocity, aftertouch, unison, glide, Vintage tests from 05–06; HQ mode; performance test passing |

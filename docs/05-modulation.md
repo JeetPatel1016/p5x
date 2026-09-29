@@ -33,7 +33,7 @@ Note: ±12 semitones at full wheel is intentionally large (full-throw effect). T
 
 ## Poly-Mod (per voice)
 ```
-pm = pm_filt_env * filterEnvLevel(0..1)  +  pm_osc_b * oscBOutput(±1)
+pm = pm_filt_env * filterEnvLevel(0..1)  +  pm_osc_b * oscBOutput(±1)   // oscBOutput range: OPEN_QUESTIONS #28
 ```
 - Osc B output used here is B's **raw summed waveform** from the current sample (before the mixer level). This allows audio-rate FM, which is the point of Poly-Mod.
 - Filter env source is the same filter envelope level the filter uses (after velocity scaling, before `flt_env_amt`).

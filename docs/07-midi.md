@@ -22,7 +22,7 @@ All events are processed at their sample offset within the block (see 00-archite
 
 - **Channel filter:** `midi_channel` 0 = Omni, 1–16 = that channel only. Applies to all messages above.
 - **Panic** (debug console button): same as All Sound Off + clear sustain + clear note stack.
-- Notes 0–127 all accepted; pitch clamps keep extreme notes safe.
+- **Note range: 61 keys, MIDI notes 36–96** (C2–C7, what a 61-key controller sends at its default octave). Note On, Note Off and Poly Pressure outside that range are ignored: still shown (dimmed) in the MIDI monitor, logged at DEBUG, never allocate a voice.
 
 ## MIDI Learn (Kontakt-style)
 No CC is mapped to anything out of the box. The user builds their own map from the panel.
@@ -42,7 +42,7 @@ No CC is mapped to anything out of the box. The user builds their own map from t
 - **Continuous params:** CC value 0–127 → normalized 0–1 → `setValueNotifyingHost`, through the parameter's own range and skew. Int params round to nearest step.
 - **Bool params:** toggle on each rising crossing of 64 (value goes from < 64 to ≥ 64). So a momentary pad/button toggles once per press.
 - **Choice params** (`flt_kbd`, `lfo_shape`, `perf_voices`): CC range split into equal zones, one per option.
-- **Takeover:** `Pickup` (default): after a preset load or a UI/host change, a mapped CC is ignored until its value crosses (or lands within 1/127 of) the parameter's current normalized value; then it tracks. `Jump`: CC applies immediately. Log pickup acquisition at DEBUG.
+- **Takeover** (Float and Int params only; Bool params always toggle on the rising edge and Choice params always jump to the CC's zone): `Pickup` (default): after a preset load or a UI/host change, a mapped CC is ignored until its value crosses (or lands within 1/127 of) the parameter's current normalized value; then it tracks. `Jump`: CC applies immediately. Log pickup acquisition at DEBUG.
 - Absolute CCs only. Relative encoder modes are out of scope (README tells users to set encoders to Absolute).
 - **Applying a learned CC (two paths, both required):**
   1. *Sound, immediately:* the audio thread writes the CC's normalized value into a per-parameter override slot that the DSP reads in place of the parameter atomic, so the change is heard with zero latency.
@@ -58,10 +58,10 @@ No CC is mapped to anything out of the box. The user builds their own map from t
 - Mappings belong to the instance, not the preset. Loading a preset never changes the map.
 - Stored in plugin state as `<MidiMap><Map cc="74" param="flt_cutoff"/>…</MidiMap>` (by param ID, not index).
 - Settings: `Save as default map` writes `%APPDATA%/P5X/midi-map.xml`; new instances load it if it exists and the host state doesn't include a `<MidiMap>` element. An empty `<MidiMap/>` counts as a map, so a cleared map stays cleared. `Clear all mappings` asks for confirmation.
-- Tooltip on mapped controls: `Cutoff · 42% · CC 74`. The debug console lists the full map.
+- Tooltip on mapped controls: `Cutoff · 1850 Hz · CC 74` (value in the parameter's real units, same format as 08-ui.md). The debug console lists the full map.
 
 ### Controller notes (KeyLab Essential mk3, for README)
-Use a User program (not DAW mode); set encoders to Absolute in Arturia MIDI Control Center; in the Standalone app select the keyboard's main MIDI port, not its DAW port; if pads trigger notes, set P5X's MIDI channel to the keyboard's channel instead of Omni.
+Use a User program (not DAW mode); set encoders to Absolute in Arturia MIDI Control Center; in the Standalone app select the keyboard's main MIDI port, not its DAW port; if pads trigger notes, set P5X's MIDI channel to the keyboard's channel instead of Omni; leave the keyboard's octave/transpose at its default, because P5X ignores notes outside 36–96.
 
 ## Tests
 - Rapid note on/off + sustain sequences (10 000 random events): no stuck voices after All Notes Off + pedal up.
@@ -71,4 +71,6 @@ Use a User program (not DAW mode); set encoders to Absolute in Arturia MIDI Cont
 - Re-learn CC 74 on `flt_res`: cutoff unmapped, resonance mapped.
 - Bool toggle: CC 20 values 0,127,127,0,127 → toggles twice.
 - Pickup: param at 0.5, CC sends 10, 20, 30: no change; sends 64: starts tracking.
+- Pickup never blocks Bool or Choice params: with pickup armed, a mapped Bool toggles on its first rising edge and a mapped Choice jumps immediately.
+- Note range: notes 35 and 97 are ignored (no voice, no sound); 36 and 96 play.
 - Map survives `getStateInformation` → `setStateInformation` round trip and a preset load.

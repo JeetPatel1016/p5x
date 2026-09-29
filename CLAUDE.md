@@ -28,7 +28,7 @@ The author and vendor is **Jeet Patel**. It must show up everywhere a host or th
 - A plugin test asserts `JucePlugin_Manufacturer == "Jeet Patel"` and `JucePlugin_Name == "P5X"`.
 
 ## Environment and getting started
-- **Machine:** Windows 11 (Lenovo Legion 5), Arturia KeyLab Essential mk3 as the MIDI controller.
+- **Machine:** Windows 11 (Lenovo Legion 5), Arturia KeyLab Essential mk3 (61 keys) as the MIDI controller. P5X plays 61 keys: MIDI notes 36–96.
 - **Installed by the user:** Visual Studio 2022 (MSVC, C++ desktop workload), CMake, Git.
 - **Folder layout** (`Desktop\p5x\`):
   - `dev\`: **this repo** (git on `main`; specs committed 2026-09-29; milestone work happens on `m*` branches).

@@ -33,7 +33,7 @@ In order:
 
 ## Unison (`perf_unison`)
 - All active voices play one note: **last-note priority**. Releasing the current note returns to the most recent still-held note (note stack of 16, drop oldest when full).
-- Each new note retriggers envelopes on all voices (from current level).
+- Each new note retriggers envelopes on all voices (from current level). Interaction with the sustain pedal is open (OPEN_QUESTIONS #30).
 - Detune spread: voice `i` of `N` gets `(i/(N-1) - 0.5) × 14 cents` (±7 cents total spread), plus its Vintage offsets.
 - Output gain in unison: voice gain × `1 / sqrt(N)` × 1.5 so unison is louder than one voice but doesn't clip hard. (P5X.)
 - Switching unison on/off: all voices get `gateOff()` first, then the new mode takes effect.
@@ -42,6 +42,7 @@ In order:
 - Constant-time glide: each voice moves from its previous note to the new note in `perf_glide` seconds, linearly in semitones.
 - In poly mode each voice glides from **its own** last note. In unison all voices glide together from the previous unison note.
 - `perf_glide = 0` → instant (no computation).
+- A voice's very first note (no previous note): open, OPEN_QUESTIONS #29.
 - First note after a voice was idle glides from that voice's last note (hardware behaviour). (Verify; see OPEN_QUESTIONS.)
 
 ## Vintage (`perf_vintage`, 0–1)
@@ -56,7 +57,7 @@ At Vintage = 0 every offset is exactly 0 and output is identical to a "perfect" 
 
 ## Output stage (after downsampling, host rate)
 1. `× master_volume` (dB → gain, −60 dB = 0).
-2. **Safety clipper:** `y = tanh(x)` for |x| > 0.8, identity below, with a continuous transition (P5X; keeps a runaway patch from reaching the host at full scale). Log WARN when engaged (rate-limited 1/s).
+2. **Safety clipper:** `y = tanh(x)` for |x| > 0.8, identity below, with a continuous transition (P5X; keeps a runaway patch from reaching the host at full scale). Log WARN when engaged (rate-limited 1/s). (Formula open: OPEN_QUESTIONS #27.)
 3. Mono → both output channels.
 
 ## Oversampling modes

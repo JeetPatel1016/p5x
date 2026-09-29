@@ -19,7 +19,7 @@ Work in octaves relative to the cutoff knob:
 ```
 octaves = 0
         + flt_env_amt * 8 * filterEnv(0..1) * velFactor          // 05-modulation.md
-        + kbdTrack * (playedNote - 60) / 12                       // kbdTrack = 0, 0.5, 1
+        + kbdTrack * (playedNote - 60) / 12                       // kbdTrack = 0, 0.5, 1; which note: OPEN_QUESTIONS #26
         + polyModFilterOctaves + wheelModFilterOctaves + vintageCutoffOffset
 cutoffHz = clamp(flt_cutoff * 2^octaves, 5 Hz, 0.45 * internalRate)
 ```
@@ -47,8 +47,8 @@ cutoffHz = clamp(flt_cutoff * 2^octaves, 5 Hz, 0.45 * internalRate)
 
 ## Tests
 - `res = 0`, fc = 1 kHz, 96 kHz: the −3 dB point of four cascaded identical one-poles sits at 0.435 × fc, so assert 435 Hz ± 5 %.
-- Slope: attenuation between 2 kHz and 4 kHz is 24 dB ± 2 dB.
-- `res = 1`, fc in {100, 1 000, 8 000} Hz, no input after reset: output oscillates at fc ± 3 %, RMS stable to ±0.5 dB between 1 s and 2 s, no NaN.
-- Passband gain at 100 Hz with res 0 vs res 0.9: drops by 3–8 dB (loss present, not compensated).
-- Cutoff swept 20 Hz → 20 kHz at 1 000 Hz rate with res 0.95: output bounded (|y| < 4), no NaN.
+- Slope: attenuation between 2 kHz and 4 kHz is 24 dB ± 2 dB. (Conflicts with the model: OPEN_QUESTIONS #22.)
+- `res = 1`, fc in {100, 1 000, 8 000} Hz, no input after reset: output oscillates at fc ± 3 %, RMS stable to ±0.5 dB between 1 s and 2 s, no NaN. (Start-up time at 100 Hz: OPEN_QUESTIONS #23.)
+- Passband gain at 100 Hz with res 0 vs res 0.9: drops by 3–8 dB (loss present, not compensated). (Conflicts with the model: OPEN_QUESTIONS #21.)
+- Cutoff swept 20 Hz → 20 kHz at 1 000 Hz rate with res 0.95: output bounded (|y| < 4), no NaN. (Sweep rate wording: OPEN_QUESTIONS #25.)
 - White noise input, random cutoff/res each sample for 10 s: no NaN/Inf, |y| < 4.
