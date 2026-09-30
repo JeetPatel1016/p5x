@@ -47,8 +47,8 @@ cutoffHz = clamp(flt_cutoff * 2^octaves, 5 Hz, 0.45 * internalRate)
 
 ## Tests
 - `res = 0`, fc = 1 kHz, 96 kHz: the −3 dB point of four cascaded identical one-poles sits at 0.435 × fc, so assert 435 Hz ± 5 %.
-- Slope: attenuation between 2 kHz and 4 kHz is 24 dB ± 2 dB. (Conflicts with the model: OPEN_QUESTIONS #22.)
-- `res = 1`, fc in {100, 1 000, 8 000} Hz, no input after reset: output oscillates at fc ± 3 %, RMS stable to ±0.5 dB between 1 s and 2 s, no NaN. (Start-up time at 100 Hz: OPEN_QUESTIONS #23.)
-- Passband gain at 100 Hz with res 0 vs res 0.9: drops by 3–8 dB (loss present, not compensated). (Conflicts with the model: OPEN_QUESTIONS #21.)
-- Cutoff swept 20 Hz → 20 kHz at 1 000 Hz rate with res 0.95: output bounded (|y| < 4), no NaN. (Sweep rate wording: OPEN_QUESTIONS #25.)
+- Slope: attenuation between 2 kHz and 4 kHz is 21.2 dB ± 1 dB (four identical poles at fc = 1 kHz haven't reached the 24 dB/oct asymptote at 2–4 × fc).
+- `res = 1`, fc in {100, 1 000, 8 000} Hz, no input after reset: output oscillates at fc ± 3 %, RMS stable to ±0.5 dB between 8 s and 9 s, no NaN. (From the 1e-6 impulse the model grows at ≈ 0.031 × fc per second, so start-up takes up to ~4.4 s at 100 Hz.)
+- Passband gain at 100 Hz, fc = 1 kHz, res 0 vs res 0.9: drops by 13.1 dB ± 1 dB (the model's 1/(1+k) loss at k = 3.63; present, not compensated).
+- Cutoff swept exponentially 20 Hz → 20 kHz → 20 Hz, one full sweep every 1 ms (1 000 sweeps per second), with res 0.95 and white-noise input: output bounded (|y| < 4), no NaN.
 - White noise input, random cutoff/res each sample for 10 s: no NaN/Inf, |y| < 4.

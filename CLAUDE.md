@@ -67,6 +67,7 @@ This file is the index. Each module has an exact spec in `docs/`. **Before you t
 ## Working rules (non-negotiable)
 1. **Implement the spec exactly.** Don't add features, controls, parameters or behaviour that aren't in a doc, even if they seem helpful.
 2. **If a spec is missing, ambiguous, or conflicts with another doc or with reality** (for example a JUCE API doesn't allow it), stop. Add an entry to `docs/OPEN_QUESTIONS.md` and ask the user. Don't pick an answer silently.
+   **Exception: specs come first, tests follow.** If a test (in a doc or in code) disagrees with the specified behaviour or model, the test is what changes: rewrite it to match the spec, record the change in `docs/DECISIONS.md`, and tell the user. Don't change the spec to satisfy a test.
 3. **Behaviour changes update the doc in the same commit.** If the user approves a change, update the relevant doc and add a line to `docs/DECISIONS.md`.
 4. **One milestone at a time** (below). Don't start the next until the current one meets its definition of done in `docs/11-testing.md`.
 5. **Real-time safety is absolute**: see `docs/00-architecture.md` § Real-time rules.

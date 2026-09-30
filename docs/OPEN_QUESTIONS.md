@@ -17,11 +17,6 @@
 | 13 | Where does the preset **name** show? The chosen look has a 3-digit 7-segment readout, which can only show the number | small light-grey text line under the display | milestone 5 |
 | 14 | The Main panel layout (control positions) only exists in the design canvas on claude.ai, which Claude Code can't open. Ask the user for a starting `art/layout.json` before milestone 5a | none in repo | milestone 5a |
 | 15 | The Audio/MIDI settings and Debug console artboards aren't in the repo either. Screenshots or a description are needed to match them | plain functional layout, palette + Kode Mono | milestone 5 |
-| 21 | Filter test conflict: the model's passband gain is 1/(1+k). At res 0.9, k = 3.63, which gives −13.3 dB, but the test expects a 3–8 dB drop. Change the test range (≈ 12–15 dB) or partly compensate in the model? | as in 03-filter.md | milestone 2 |
-| 22 | Filter slope test: four ideal poles at fc = 1 kHz give 21.2 dB between 2 and 4 kHz (not 24 ± 2), because 2–4 × fc isn't yet asymptotic. Rec.: measure between 4 and 8 kHz (23.3 dB) | as in 03-filter.md | milestone 2 |
-| 23 | Self-oscillation start-up: with k = 4.08 the small-signal growth rate is ≈ 0.031 × fc per second, so a 1e-6 impulse at fc = 100 Hz needs ≈ 4.4 s to reach full level. The "RMS stable between 1 s and 2 s" test fails at 100 Hz. Options: measure later at low fc, a larger excitation, or a larger k at max | as in 03-filter.md | milestone 2 |
-| 24 | Saw aliasing test is ambiguous (a 1 kHz saw, or a sweep up to C8?), and −80 dB is likely out of reach for 2-sample PolyBLEP at 2×. Rec.: measure in milestone 2, then set the threshold with the user | as in 02-oscillators.md | milestone 2 |
-| 25 | Filter sweep test "20 Hz → 20 kHz at 1 000 Hz rate": does that mean one sweep every 1 ms? | unspecified | milestone 2 |
 | 26 | Filter keyboard tracking uses which note: the glided note, and does it include bend? Rec.: glided note, no bend | unspecified | milestone 2 |
 | 28 | Poly-Mod Osc B source is labelled ±1, but B's raw summed waveform reaches ±3 with all shapes on (02 doesn't normalise). Rec.: use the raw sum and fix the label | raw sum | milestone 3 |
 | 29 | Glide for a voice's very first note (no previous note). Rec.: no glide | unspecified | milestone 4 |

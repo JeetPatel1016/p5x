@@ -68,7 +68,7 @@ All waveforms are generated from a `double` phase in [0, 1) advancing by `freq /
 - An idle voice does **not** advance its oscillators (CPU saving); on reactivation it continues from the stored phase. (Drift of free-running is inaudible here.)
 
 ## Tests
-- Saw at 1 kHz, 96 kHz internal, 2× OS path: aliasing products below −80 dB relative to fundamental up to C8 (4186 Hz). Measure via FFT after downsampling. (Wording and threshold open: OPEN_QUESTIONS #24.)
+- Saw at fundamentals from 1 kHz up to C8 (4186 Hz), 96 kHz internal, through the 2× downsampler: measure aliasing products relative to the fundamental via FFT after downsampling. The threshold is what the specified model (2-sample PolyBLEP at 2×) achieves: measure it in milestone 2, set the test just below it and record the value in DECISIONS.md (−80 dB was an estimate the model may not reach). The test guards against regressions; it doesn't change the model.
 - Pulse at PW 0.5: no DC beyond ±0.01 after DC blocker; PW 0.05 and 0.95: audible, non-silent, peak ≤ 1.1.
 - Triangle: spectrum odd harmonics only, 12 dB/oct rolloff ±2 dB for first 5 harmonics.
 - Sync: A at 3× B frequency with sync on: A's output period equals B's period ±1 sample.
