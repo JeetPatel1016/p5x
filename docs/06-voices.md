@@ -12,7 +12,7 @@ Per internal sample:
 6. Filter (cutoff per 03-filter.md).
 7. VCA: `× ampEnv × velocityGain`.
 8. DC blocker: one-pole high-pass at 5 Hz.
-9. Add to the shared oversampled buffer × **voice gain 0.2** (P5X headroom: a 5-voice chord of full-level voices peaks around −1 to −0.5 dBFS; more voices are caught by the safety clipper).
+9. Add to the shared oversampled buffer × **voice gain 0.16** (P5X headroom: 5 full-level voices sum to at most 0.8, so with the default voice count the safety clipper never engages; with 8 or 10 voices dense chords can reach its knee).
 
 ## Voice count
 - `perf_voices` = 5 / 8 / 10. Allocate 10 voices always; the parameter sets how many are active.

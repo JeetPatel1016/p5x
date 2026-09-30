@@ -55,7 +55,7 @@ TEST_CASE ("Processor: sine per note, both channels, correct pitch", "[plugin][p
     juce::MidiBuffer none;
     f.processor.processBlock (out, none);
 
-    REQUIRE (peak (out) == Approx (0.2f).margin (0.01));
+    REQUIRE (peak (out) == Approx (0.16f).margin (0.01));
     REQUIRE (frequency (out, kRate) == Approx (440.0).epsilon (0.002));
 
     for (int i = 0; i < out.getNumSamples(); ++i)
@@ -361,18 +361,13 @@ TEST_CASE ("Processor: chords never reach full scale; the safety clipper catches
         return result;
     };
 
+    for (const auto& chord : { std::initializer_list<int> { 60, 64, 67, 72, 76 }, std::initializer_list<int> { 60, 61, 62, 63, 64 } })
     {
-        // A triad stays below the clipper threshold entirely.
+        // Default 5 voices can never reach the clipper knee (5 × 0.16 = 0.8).
         Prepared f;
         logLines (f.processor, f.logPosition);
-        REQUIRE (chordPeak (f.processor, { 60, 64, 67 }) <= 0.8f);
+        REQUIRE (chordPeak (f.processor, chord) <= 0.8f);
         REQUIRE_FALSE (containsLine (logLines (f.processor, f.logPosition), "Safety clipper engaged"));
-    }
-
-    {
-        // Five voices: peaks may touch the knee, but nothing reaches full scale.
-        Prepared f;
-        REQUIRE (chordPeak (f.processor, { 60, 61, 62, 63, 64 }) < 1.0f);
     }
 
     {
