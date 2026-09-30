@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(P5X VERSION 0.2.0 LANGUAGES C CXX)
+project(P5X VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,14 +38,19 @@ add_library(p5x_dsp STATIC
     ${SRC}/dsp/Envelope.cpp
     ${SRC}/dsp/LadderFilterCEM.h
     ${SRC}/dsp/LadderFilterCEM.cpp
+    ${SRC}/dsp/Lfo.h
+    ${SRC}/dsp/Lfo.cpp
     ${SRC}/dsp/Oscillator.h
     ${SRC}/dsp/Oscillator.cpp
     ${SRC}/dsp/OutputStage.h
+    ${SRC}/dsp/PinkNoise.h
     ${SRC}/dsp/Random.h
     ${SRC}/dsp/Smoother.h
     ${SRC}/dsp/Voice.h
     ${SRC}/dsp/Voice.cpp
-    ${SRC}/dsp/VoiceAllocator.h)
+    ${SRC}/dsp/VoiceAllocator.h
+    ${SRC}/dsp/WheelModSource.h
+    ${SRC}/dsp/WheelModSource.cpp)
 target_include_directories(p5x_dsp PUBLIC "${SRC}")
 target_compile_options(p5x_dsp PRIVATE ${P5X_STRICT_FLAGS})
 

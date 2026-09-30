@@ -96,12 +96,16 @@ P5XAudioProcessor::P5XAudioProcessor (bool withInputBus)
 
     using namespace params::id;
     auto at = [this] (const char* id) { return getParameterIndex (id); };
-    idx = { at (oscAFreq), at (oscASaw), at (oscAPulse), at (oscAPw),
-            at (oscBFreq), at (oscBFine), at (oscBSaw), at (oscBTri), at (oscBPulse), at (oscBPw), at (oscBKbd),
+    idx = { at (oscAFreq), at (oscASaw), at (oscAPulse), at (oscAPw), at (oscASync),
+            at (oscBFreq), at (oscBFine), at (oscBSaw), at (oscBTri), at (oscBPulse), at (oscBPw), at (oscBLoFreq),
+            at (oscBKbd),
             at (mixOscA), at (mixOscB), at (mixNoise),
             at (fltCutoff), at (fltRes), at (fltEnvAmt), at (fltKbd),
             at (fenvAttack), at (fenvDecay), at (fenvSustain), at (fenvRelease),
             at (aenvAttack), at (aenvDecay), at (aenvSustain), at (aenvRelease),
+            at (pmFiltEnv), at (pmOscB), at (pmDestFreqA), at (pmDestPwA), at (pmDestFilter),
+            at (lfoRate), at (lfoShape),
+            at (wmMix), at (wmDestFreqA), at (wmDestFreqB), at (wmDestPwA), at (wmDestPwB), at (wmDestFilter),
             at (masterTune), at (masterVolume), at (bendRange), at (perfVoices) };
 
     seed.store (makeSeed());
@@ -202,14 +206,20 @@ void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     // Smoothing times from 01-parameters.md; they run at the internal rate.
     for (auto* s : { &pwASmoother, &pwBSmoother, &fineBSmoother, &mixASmoother, &mixBSmoother, &mixNoiseSmoother,
-                     &resSmoother, &envAmtSmoother, &fSustainSmoother, &aSustainSmoother, &tuneSmoother })
-        s->prepare (internalRate, 20.0);
+                     &resSmoother, &envAmtSmoother, &fSustainSmoother, &aSustainSmoother, &tuneSmoother,
+                     &pmFilterEnvSmoother, &pmOscBSmoother, &wheelSmoother })
+        s->prepare (internalRate, 20.0); // mod wheel: Lin 20 (05-modulation.md § Wheel-Mod)
 
     bendSmoother.prepare (internalRate, 5.0); // 07-midi.md: pitch bend Lin 5 ms
     cutoffSmoother.prepare (internalRate, 20.0);
     volumeSmoother.prepare (hostRate, 20.0);
+    wheelModSource.prepare (hostRate, kOversamplingFactor, voiceSeed);
 
     readBlockParameters();
+    wheelModSource.resetSmoothing (effectiveValue (idx.lfoRate), effectiveValue (idx.wmMix));
+    pmFilterEnvSmoother.reset (effectiveValue (idx.pmFiltEnv));
+    pmOscBSmoother.reset (effectiveValue (idx.pmOscB));
+    wheelSmoother.reset (modWheelValue);
     pwASmoother.reset (effectiveValue (idx.oscAPw));
     pwBSmoother.reset (effectiveValue (idx.oscBPw));
     fineBSmoother.reset (effectiveValue (idx.oscBFine));
@@ -232,6 +242,8 @@ void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     testToneRemaining = 0;
     cpuSmoothed = 0.0f;
+    scopeRing.fill (0.0f);
+    scopeWrite = 0;
 }
 
 void P5XAudioProcessor::releaseResources()
@@ -279,6 +291,11 @@ void P5XAudioProcessor::readBlockParameters() noexcept
     aSustainSmoother.setTarget (effectiveValue (idx.aenvSustain));
     tuneSmoother.setTarget (effectiveValue (idx.masterTune));
     bendSmoother.setTarget (bendNormalised * effectiveValue (idx.bendRange));
+    pmFilterEnvSmoother.setTarget (effectiveValue (idx.pmFiltEnv));
+    pmOscBSmoother.setTarget (effectiveValue (idx.pmOscB));
+
+    const int shapeChoice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.lfoShape)));
+    wheelModSource.setParameters (effectiveValue (idx.lfoRate), (dsp::Lfo::Shape) shapeChoice, effectiveValue (idx.wmMix));
 
     const float volumeDb = effectiveValue (idx.masterVolume);
     volumeSmoother.setTarget (volumeDb <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (volumeDb));
@@ -289,7 +306,17 @@ void P5XAudioProcessor::readBlockParameters() noexcept
     in.oscBFreq = (int) std::lround (effectiveValue (idx.oscBFreq));
     in.shapesA = { effectiveBool (idx.oscASaw), false, effectiveBool (idx.oscAPulse) };
     in.shapesB = { effectiveBool (idx.oscBSaw), effectiveBool (idx.oscBTri), effectiveBool (idx.oscBPulse) };
+    in.syncA = effectiveBool (idx.oscASync);
+    in.oscBLoFreq = effectiveBool (idx.oscBLoFreq);
     in.oscBKeyboard = effectiveBool (idx.oscBKbd);
+    in.pmFreqA = effectiveBool (idx.pmDestFreqA);
+    in.pmPwA = effectiveBool (idx.pmDestPwA);
+    in.pmFilter = effectiveBool (idx.pmDestFilter);
+    in.wmFreqA = effectiveBool (idx.wmDestFreqA);
+    in.wmFreqB = effectiveBool (idx.wmDestFreqB);
+    in.wmPwA = effectiveBool (idx.wmDestPwA);
+    in.wmPwB = effectiveBool (idx.wmDestPwB);
+    in.wmFilter = effectiveBool (idx.wmDestFilter);
     in.keyboardTrack = 0.5f * (float) juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.fltKbd)));
     in.filterEnv = { effectiveValue (idx.fenvAttack), effectiveValue (idx.fenvDecay), 0.0f, effectiveValue (idx.fenvRelease) };
     in.ampEnv = { effectiveValue (idx.aenvAttack), effectiveValue (idx.aenvDecay), 0.0f, effectiveValue (idx.aenvRelease) };
@@ -396,7 +423,12 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
         for (int i = 0; i < internalN; ++i)
         {
             const auto s = (size_t) i;
-            smoothed[sPitchOffset][s] = bendSmoother.next() + tuneSmoother.next() * 0.01f;
+            const float tune = tuneSmoother.next() * 0.01f;
+            smoothed[sPitchOffset][s] = bendSmoother.next() + tune;
+            smoothed[sMasterTune][s] = tune;
+            smoothed[sPmFilterEnv][s] = pmFilterEnvSmoother.next();
+            smoothed[sPmOscB][s] = pmOscBSmoother.next();
+            smoothed[sWheelAmount][s] = wheelSmoother.next();
             smoothed[sPwA][s] = pwASmoother.next();
             smoothed[sPwB][s] = pwBSmoother.next();
             smoothed[sFineB][s] = fineBSmoother.next();
@@ -410,8 +442,15 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
             smoothed[sAmpSustain][s] = aSustainSmoother.next();
         }
 
+        wheelModSource.render (smoothed[sWheelSource].data(), n);
+
         auto& in = voiceInputs;
         in.pitchOffset = smoothed[sPitchOffset].data();
+        in.masterTune = smoothed[sMasterTune].data();
+        in.pmFilterEnv = smoothed[sPmFilterEnv].data();
+        in.pmOscB = smoothed[sPmOscB].data();
+        in.wheelModAmount = smoothed[sWheelAmount].data();
+        in.wheelModSource = smoothed[sWheelSource].data();
         in.pwA = smoothed[sPwA].data();
         in.pwB = smoothed[sPwB].data();
         in.fineB = smoothed[sFineB].data();
@@ -459,6 +498,12 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
             testToneRemaining -= toneSamples;
         }
 
+        for (int i = 0; i < n; ++i)
+        {
+            scopeRing[(size_t) scopeWrite] = hostScratch[(size_t) i];
+            scopeWrite = (scopeWrite + 1) % debug::kScopeSamples;
+        }
+
         // Mono → every output channel.
         for (int ch = 0; ch < numChannels; ++ch)
             std::copy (hostScratch.begin(), hostScratch.begin() + n, buffer.getWritePointer (ch, position));
@@ -488,6 +533,9 @@ void P5XAudioProcessor::pushTelemetry (int numSamples, double elapsed)
     snapshot.oversampling = kOversamplingFactor;
     snapshot.xruns = xruns;
     snapshot.voiceCount = allocator.getActiveVoiceCount();
+
+    for (int i = 0; i < debug::kScopeSamples; ++i) // oldest first
+        snapshot.scope[(size_t) i] = scopeRing[(size_t) ((scopeWrite + i) % debug::kScopeSamples)];
 
     for (int i = 0; i < kMaxVoices; ++i)
     {
@@ -625,6 +673,7 @@ void P5XAudioProcessor::allNotesOff()
 void P5XAudioProcessor::resetAllControllers()
 {
     modWheelValue = 0.0f;
+    wheelSmoother.setTarget (0.0f);
     channelAftertouch = 0.0f;
     voicePressure.fill (0.0f);
     bendNormalised = 0.0f;
@@ -641,7 +690,8 @@ void P5XAudioProcessor::pitchBend (int value14)
 
 void P5XAudioProcessor::modWheel (int value)
 {
-    modWheelValue = (float) value / 127.0f; // Wheel-Mod amount, used from milestone 3
+    modWheelValue = (float) value / 127.0f; // Wheel-Mod amount (05-modulation.md § Wheel-Mod)
+    wheelSmoother.setTarget (modWheelValue);
 }
 
 void P5XAudioProcessor::channelPressure (int value)

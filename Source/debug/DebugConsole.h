@@ -13,8 +13,8 @@ class P5XAudioProcessor;
 
 namespace p5x::debug
 {
-// Debug console (10-debug-and-harness.md): log, MIDI monitor, MIDI map, Voices table and CPU card.
-// The scope arrives in milestone 3, Dump state in 6.
+// Debug console (10-debug-and-harness.md): log, MIDI monitor, MIDI map, Voices table, CPU card and
+// scope. Dump state arrives in milestone 6.
 class DebugConsole : public juce::Component, private juce::Timer
 {
 public:
@@ -29,6 +29,7 @@ private:
     class MonitorModel;
     class MapModel;
     class VoicesModel;
+    class ScopeView;
 
     void timerCallback() override;
     void rebuildVisibleLog();
@@ -47,6 +48,7 @@ private:
     std::unique_ptr<VoicesModel> voicesModel;
     juce::ListBox logList, monitorList, mapList, voicesList;
     juce::Label cpuCard;
+    std::unique_ptr<ScopeView> scopeView;
 
     std::vector<LogEntry> entries;        // this instance's entries plus global ones
     std::vector<const LogEntry*> visible; // after the level filter

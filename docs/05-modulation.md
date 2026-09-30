@@ -17,7 +17,7 @@ source   = (1 - wm_mix) * lfo + wm_mix * pinkNoise          // both bipolar ±1
 amount   = max(modWheel, aftertouchIfEnabled)                // 0..1, see below
 wm       = source * amount
 ```
-- Pink noise: global white noise through a −3 dB/oct filter (Paul Kellet "economy" 3-pole approximation, implemented from the published coefficients), then scaled so RMS ≈ 0.35.
+- Pink noise: global white noise through a −3 dB/oct filter (Paul Kellet "economy" 3-pole approximation, implemented from the published coefficients), then scaled so RMS ≈ 0.35. Generated at the **host rate** alongside the LFO (the coefficients are designed for 44.1–48 kHz) and linearly interpolated to the internal rate like the LFO.
 - `modWheel` = CC1 / 127, smoothed Lin 20 ms. CC1 is hardwired and not learnable (07-midi.md).
 
 Destinations (each toggled independently):
@@ -33,9 +33,9 @@ Note: ±12 semitones at full wheel is intentionally large (full-throw effect). T
 
 ## Poly-Mod (per voice)
 ```
-pm = pm_filt_env * filterEnvLevel(0..1)  +  pm_osc_b * oscBOutput(±1)   // oscBOutput range: OPEN_QUESTIONS #28
+pm = pm_filt_env * filterEnvLevel(0..1)  +  pm_osc_b * oscBOutput(±3)   // raw sum of B's active shapes, each ±1
 ```
-- Osc B output used here is B's **raw summed waveform** from the current sample (before the mixer level). This allows audio-rate FM, which is the point of Poly-Mod.
+- Osc B output used here is B's **raw summed waveform** from the current sample (before the mixer level), not normalised: with saw + tri + pulse on it reaches ±3, so more shapes give deeper modulation. This allows audio-rate FM, which is the point of Poly-Mod.
 - Filter env source is the same filter envelope level the filter uses (after velocity scaling, before `flt_env_amt`).
 
 | Toggle | Effect at `pm = 1` |

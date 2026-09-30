@@ -63,7 +63,21 @@ struct VoiceTelemetry
     float ampLevel = 0.0f;
 };
 
-// 10-debug-and-harness.md § Telemetry. The scope's samples arrive with milestone 3.
+// Scope (10-debug-and-harness.md § Debug console window): the last output samples, oldest first.
+inline constexpr int kScopeSamples = 512;
+
+// Where the scope trace starts: the first rising zero crossing (previous sample < 0, this one >= 0)
+// at an index in [1, maxStart]; 0 when there is none (e.g. silence).
+inline int findScopeTrigger (const float* samples, int maxStart) noexcept
+{
+    for (int i = 1; i <= maxStart; ++i)
+        if (samples[i - 1] < 0.0f && samples[i] >= 0.0f)
+            return i;
+
+    return 0;
+}
+
+// 10-debug-and-harness.md § Telemetry.
 struct TelemetrySnapshot
 {
     static constexpr int kMaxVoices = 10;
@@ -76,5 +90,6 @@ struct TelemetrySnapshot
     int activeVoices = 0;
     int voiceCount = 5;
     std::array<VoiceTelemetry, kMaxVoices> voices {};
+    std::array<float, kScopeSamples> scope {};
 };
 } // namespace p5x::debug

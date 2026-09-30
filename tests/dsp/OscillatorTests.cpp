@@ -1,6 +1,6 @@
 // P5X — Copyright (c) 2026 Jeet Patel. Licensed under GPL-3.0-or-later.
 // 02-oscillators.md § Tests. The saw aliasing test runs through the real downsampler in the plugin
-// tests (plugin/AliasingTests.cpp); sync and Lo Freq arrive with milestone 3.
+// tests (plugin/AliasingTests.cpp); Lo Freq is a voice feature (dsp/VoiceTests.cpp).
 #include "dsp/Oscillator.h"
 #include "dsp/Random.h"
 #include "support/Spectrum.h"
@@ -113,19 +113,21 @@ TEST_CASE ("Oscillator: triangle has odd harmonics only, falling 12 dB/oct", "[d
 
 TEST_CASE ("Oscillator: shapes sum; all off is silence", "[dsp][osc]")
 {
-    Oscillator a, b;
-    a.prepare (kRate);
-    b.prepare (kRate);
-    a.reset (0.3);
-    b.reset (0.3);
+    // Three oscillators from the same phase, run side by side (each carries its own residual into
+    // the next sample, so they can't be forked from one per sample).
+    Oscillator a, sawOnly, pulseOnly;
+
+    for (auto* o : { &a, &sawOnly, &pulseOnly })
+    {
+        o->prepare (kRate);
+        o->reset (0.3);
+    }
 
     for (int i = 0; i < 1000; ++i)
     {
         const float sum = a.process (523.0, 0.4f, { true, false, true });
-        Oscillator sawOnly = b, pulseOnly = b;
         const float saw = sawOnly.process (523.0, 0.4f, { true, false, false });
         const float pulse = pulseOnly.process (523.0, 0.4f, { false, false, true });
-        b.process (523.0, 0.4f, {});
         REQUIRE (sum == Approx (saw + pulse).margin (1e-5));
     }
 
@@ -152,4 +154,133 @@ TEST_CASE ("Oscillator: extreme inputs never produce NaN or leave [0, 1) phase",
     }
 
     REQUIRE (std::isfinite (osc.process (std::nan (""), std::nanf (""), { true, true, true })));
+}
+
+TEST_CASE ("Oscillator: sync master reports where in the sample it wrapped", "[dsp][osc][sync]")
+{
+    Oscillator b;
+    b.prepare (kRate);
+    b.reset (0.95);
+
+    // dt = 0.1: from phase 0.95 the wrap comes half-way through the step.
+    b.process (0.1 * kRate, 0.5f, { true, false, false });
+    REQUIRE (b.wrappedThisSample());
+    REQUIRE (b.wrapFraction() == Approx (0.5));
+
+    b.process (0.1 * kRate, 0.5f, { true, false, false });
+    REQUIRE_FALSE (b.wrappedThisSample());
+
+    // The master wraps even with every shape off.
+    b.reset (0.99);
+    b.process (0.1 * kRate, 0.5f, {});
+    REQUIRE (b.wrappedThisSample());
+    REQUIRE (b.wrapFraction() == Approx (0.1));
+}
+
+TEST_CASE ("Oscillator: hard sync locks A's period to B's", "[dsp][osc][sync]")
+{
+    // A at 3.3× B with sync on: A's output repeats with B's period (96 samples) ±1 (02 § Tests).
+    constexpr double fB = 1000.0, fA = 3300.0;
+    constexpr int period = (int) (kRate / fB);
+
+    auto renderA = [] (bool sync)
+    {
+        Oscillator a, b;
+        a.prepare (kRate);
+        b.prepare (kRate);
+        a.reset (0.37);
+        b.reset (0.81);
+        std::vector<float> out (9600);
+
+        for (auto& s : out)
+        {
+            b.process (fB, 0.5f, { true, false, false });
+            const double at = sync && b.wrappedThisSample() ? b.wrapFraction() : -1.0;
+            s = a.process (fA, 0.5f, { true, false, true }, at);
+        }
+
+        return out;
+    };
+
+    // Lag (in 60..140 samples) at which the signal best matches itself.
+    auto bestLag = [] (const std::vector<float>& x)
+    {
+        int best = 0;
+        double bestError = 1e30;
+
+        for (int lag = 60; lag <= 140; ++lag)
+        {
+            double error = 0.0;
+
+            for (size_t i = 1000; i < 8000; ++i)
+                error += std::abs (x[i] - x[i + (size_t) lag]);
+
+            if (error < bestError)
+            {
+                bestError = error;
+                best = lag;
+            }
+        }
+
+        return std::pair { best, bestError / 7000.0 };
+    };
+
+    const auto [lag, error] = bestLag (renderA (true));
+    REQUIRE (std::abs (lag - period) <= 1);
+    REQUIRE (error < 0.02);
+
+    // Without sync A keeps its own period: one B period later it's 0.3 of a cycle out.
+    const auto free = renderA (false);
+    double freeError = 0.0;
+
+    for (size_t i = 1000; i < 8000; ++i)
+        freeError += std::abs (free[i] - free[i + (size_t) period]) / 7000.0;
+
+    REQUIRE (freeError > 0.2);
+}
+
+TEST_CASE ("Oscillator: sync resets are band-limited like natural wraps", "[dsp][osc][sync]")
+{
+    // A synced saw's reset from phase q to 0 is a step of −2q; with the residual split over two
+    // samples no sample-to-sample jump exceeds what a band-limited step of that size allows.
+    Oscillator a, b;
+    a.prepare (kRate);
+    b.prepare (kRate);
+    a.reset (0.0);
+    b.reset (0.0);
+    float previous = 0.0f, largest = 0.0f;
+
+    for (int i = 0; i < 20000; ++i)
+    {
+        b.process (220.0, 0.5f, {});
+        const float s = a.process (220.0 * 2.71, 0.5f, { true, false, false }, b.wrappedThisSample() ? b.wrapFraction() : -1.0);
+
+        if (i > 0)
+            largest = std::max (largest, std::abs (s - previous));
+
+        previous = s;
+    }
+
+    // A naive reset would jump by up to 2 in one sample; the 2-sample residual spreads it.
+    REQUIRE (largest < 1.6f);
+}
+
+TEST_CASE ("Oscillator: sync stays finite with random frequencies and fractions", "[dsp][osc][sync]")
+{
+    Oscillator a;
+    a.prepare (kRate);
+    a.reset (0.2);
+    p5x::Random random (11);
+
+    for (int i = 0; i < 200000; ++i)
+    {
+        const double freq = (random.nextDouble() * 2.0 - 1.0) * 1.0e6;
+        const double at = random.nextDouble() < 0.3 ? random.nextDouble() : -1.0;
+        const float s = a.process (freq, (float) random.nextDouble(), { true, true, true }, at);
+
+        REQUIRE (std::isfinite (s));
+        REQUIRE (std::abs (s) < 6.0f);
+        REQUIRE (a.getPhase() >= 0.0);
+        REQUIRE (a.getPhase() < 1.0);
+    }
 }
