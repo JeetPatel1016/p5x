@@ -204,6 +204,75 @@ private:
 };
 
 //==================================================================================================
+// Scope (10-debug-and-harness.md): the last 512 output samples, the trace starting at the first
+// rising zero crossing so periodic sounds stand still. The trace auto-scales so its peak fills about
+// 90 % of the height (zoom ×1 to ×64, rising at once, falling back slowly so it doesn't pump); the
+// true peak level and the zoom are printed in the corner.
+class DebugConsole::ScopeView final : public juce::Component
+{
+public:
+    static constexpr int kTraceSamples = kScopeSamples / 2;
+    static constexpr float kFill = 0.9f, kMaxZoom = 64.0f;
+
+    void update (const TelemetrySnapshot& s)
+    {
+        samples = s.scope;
+        start = findScopeTrigger (samples.data(), kScopeSamples - kTraceSamples);
+
+        float peak = 0.0f;
+
+        for (int i = 0; i < kTraceSamples; ++i)
+            peak = std::max (peak, std::abs (samples[(size_t) (start + i)]));
+
+        // Peak hold: jump up immediately, decay about 3 dB per second at the 30 Hz refresh.
+        heldPeak = std::max (peak, heldPeak * 0.9767f);
+        zoom = heldPeak > 0.0f ? juce::jlimit (1.0f, kMaxZoom, kFill / heldPeak) : 1.0f;
+        currentPeak = peak;
+        repaint();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced (8.0f);
+        const float mid = area.getCentreY();
+        const float halfHeight = area.getHeight() * 0.5f;
+
+        g.setColour (ui::colours::labelDim.withAlpha (0.25f));
+        g.drawHorizontalLine (juce::roundToInt (mid), area.getX(), area.getRight());
+        g.drawRect (area);
+
+        juce::Path trace;
+
+        for (int i = 0; i < kTraceSamples; ++i)
+        {
+            const float x = area.getX() + area.getWidth() * (float) i / (float) (kTraceSamples - 1);
+            const float y = mid - juce::jlimit (-1.0f, 1.0f, samples[(size_t) (start + i)] * zoom) * halfHeight;
+
+            if (i == 0)
+                trace.startNewSubPath (x, y);
+            else
+                trace.lineTo (x, y);
+        }
+
+        g.setColour (ui::colours::accent);
+        g.strokePath (trace, juce::PathStrokeType (1.5f));
+
+        const auto peakText = currentPeak > 0.0f ? juce::String (juce::Decibels::gainToDecibels (currentPeak), 1) + " dBFS"
+                                                 : juce::String ("silence");
+        g.setColour (ui::colours::labelDim);
+        g.setFont (ui::LookAndFeelP5X::font (12.0f));
+        g.drawText ("peak " + peakText + "  |  zoom x" + juce::String (zoom, 1) + "  |  "
+                        + (start > 0 ? "trig: rising zero crossing" : "trig: none (free run)"),
+                    area.reduced (6.0f), juce::Justification::topRight);
+    }
+
+private:
+    std::array<float, kScopeSamples> samples {};
+    int start = 0;
+    float heldPeak = 0.0f, currentPeak = 0.0f, zoom = 1.0f;
+};
+
+//==================================================================================================
 DebugConsole::DebugConsole (P5XAudioProcessor& p)
     : processor (p)
 {
@@ -225,6 +294,8 @@ DebugConsole::DebugConsole (P5XAudioProcessor& p)
     tabs.addTab ("MIDI monitor", background, &monitorList, false);
     tabs.addTab ("MIDI map", background, &mapList, false);
     tabs.addTab ("Voices", background, &voicesList, false);
+    scopeView = std::make_unique<ScopeView>();
+    tabs.addTab ("Scope", background, scopeView.get(), false);
 
     // CPU card: CPU %, rate, block size, oversampling factor, xruns.
     cpuCard.setFont (ui::LookAndFeelP5X::font (12.0f));
@@ -309,6 +380,10 @@ void DebugConsole::timerCallback()
     voicesModel->update (t);
     voicesList.updateContent();
     voicesList.repaint();
+
+    if (scopeView->isShowing())
+        scopeView->update (t);
+
     cpuCard.setText (juce::String (juce::CharPointer_UTF8 ("CPU ")) + juce::String (t.cpuPercent, 1) + "%  |  "
                          + juce::String (juce::roundToInt (t.sampleRate)) + " Hz  |  block " + juce::String (t.blockSize)
                          + "  |  " + juce::String (t.oversampling) + "x  |  xruns " + juce::String (t.xruns),

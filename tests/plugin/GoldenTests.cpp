@@ -5,7 +5,7 @@
 // (±0.5 dB) and spectral centroid (±3 %). Not bit-exact.
 //
 // Writing new references needs the user's approval and a DECISIONS.md line; it happens only with
-// P5X_UPDATE_GOLDEN=1 set. Regenerate golden.mid with the hidden test "[.generate]".
+// P5X_UPDATE_GOLDEN set (see below). Regenerate golden.mid with the hidden test "[.generate]".
 
 #include "plugin/TestProcessor.h"
 #include "support/Spectrum.h"
@@ -45,6 +45,17 @@ const std::vector<Patch>& patches()
                                 { "aenv_release", 0.1f }, { "flt_cutoff", 3000.0f }, { "flt_res", 0.5f } } },
         { "kbd_off_tracking", { { "osc_b_kbd", 0.0f }, { "osc_b_fine", 7.0f }, { "flt_kbd", 2.0f },
                                 { "flt_cutoff", 1500.0f }, { "flt_env_amt", 0.2f } } },
+        // Milestone 3: classic sync sweep (filter envelope → Freq A) with a touch of Osc B FM.
+        { "sync_polymod_fm", { { "osc_a_sync", 1.0f }, { "osc_a_freq", 7.0f }, { "mix_osc_b", 0.0f },
+                               { "pm_filt_env", 0.4f }, { "pm_osc_b", 0.1f }, { "pm_dest_freq_a", 1.0f },
+                               { "flt_cutoff", 6000.0f }, { "flt_res", 0.2f }, { "fenv_decay", 0.8f },
+                               { "fenv_sustain", 0.1f } } },
+        // Milestone 3: Osc B as a slow Lo Freq, Kbd off triangle, sweeping the filter and A's PW.
+        { "polymod_filter_lofreq", { { "osc_b_lofreq", 1.0f }, { "osc_b_kbd", 0.0f }, { "osc_b_saw", 0.0f },
+                                     { "osc_b_tri", 1.0f }, { "mix_osc_b", 0.0f }, { "osc_a_saw", 0.0f },
+                                     { "osc_a_pulse", 1.0f }, { "pm_osc_b", 0.5f }, { "pm_dest_filter", 1.0f },
+                                     { "pm_dest_pw_a", 1.0f }, { "flt_cutoff", 800.0f }, { "flt_res", 0.5f },
+                                     { "flt_env_amt", 0.1f } } },
     };
 
     return list;
@@ -232,7 +243,11 @@ TEST_CASE ("Golden: write tests/data/golden.mid", "[.generate]")
 TEST_CASE ("Golden renders match their references", "[plugin][golden]")
 {
     const auto seq = loadGoldenMidi();
-    const bool update = juce::SystemStats::getEnvironmentVariable ("P5X_UPDATE_GOLDEN", {}) == "1";
+
+    // "1" rewrites every reference; a comma-separated list of patch names writes only those (for
+    // adding a new patch without touching the approved ones).
+    const auto updateSetting = juce::SystemStats::getEnvironmentVariable ("P5X_UPDATE_GOLDEN", {});
+    const auto updateNames = juce::StringArray::fromTokens (updateSetting, ",", {});
 
     for (const auto& patch : patches())
     {
@@ -245,7 +260,7 @@ TEST_CASE ("Golden renders match their references", "[plugin][golden]")
 
         REQUIRE (p5x::test::rms (rendered) > 1.0e-3); // the patch actually sounds
 
-        if (update)
+        if (updateSetting == "1" || updateNames.contains (patch.name))
         {
             REQUIRE (writeWav (reference, rendered));
             std::printf ("golden: wrote %s\n", reference.getFullPathName().toRawUTF8());

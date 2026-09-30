@@ -11,9 +11,9 @@ public:
     void prepare (double internalRate);
     void reset (double initialPhase);                  // phase in [0,1)
     // Returns one sample. freqHz already includes all modulation. pw in [0.02, 0.98].
-    float process (double freqHz, float pw, OscShapes shapes);
-    // Hard sync: call after master's process() when master wrapped this sample.
-    void sync (double fractionalPos);                  // 0..1 position of wrap within the sample
+    // Hard sync: run the master (B) first; if it wrapped this sample, pass its wrapFraction()
+    // (0..1 position of the wrap within the sample) as syncFraction, else a negative value.
+    float process (double freqHz, float pw, OscShapes shapes, double syncFraction = -1.0);
     bool wrappedThisSample() const;                    // for use as sync master
     double wrapFraction() const;
 };
@@ -32,7 +32,7 @@ freqX = 440 * 2^((noteX - 69) / 12)          // then ÷128 for B when Lo Freq is
 ```
 - `osc_a_freq` / `osc_b_freq` are whole semitones (quantized knob, like the hardware DAC steps).
 - `osc_b_fine` adds cents to B only.
-- **Osc B Kbd off:** B's `playedNote` is replaced with a fixed reference note 60 (C4), and B also ignores bend, glide and master tune. The other offsets (`osc_b_freq`, fine, unison, Vintage, Wheel-Mod) still apply. (Verify; OPEN_QUESTIONS #2.)
+- **Osc B Kbd off:** B's `playedNote` is replaced with a fixed reference note 60 (C4), and B also ignores bend and glide. Master tune still applies (it feeds every VCO on the hardware), as do the other offsets (`osc_b_freq`, fine, unison, Vintage, Wheel-Mod).
 - **Osc B Lo Freq on:** B's final frequency is divided by 128 (7 octaves down). Anti-aliasing is unnecessary at that rate but the waveshape code path stays the same. With Kbd off and all offsets 0, B runs at 261.63 / 128 = 2.04 Hz.
 - Clamp final frequency to [0.01 Hz, 0.45 × internalRate].
 

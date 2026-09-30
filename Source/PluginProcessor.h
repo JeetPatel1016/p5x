@@ -7,6 +7,7 @@
 #include "dsp/Smoother.h"
 #include "dsp/Voice.h"
 #include "dsp/VoiceAllocator.h"
+#include "dsp/WheelModSource.h"
 #include "midi/MidiHandler.h"
 #include "midi/MidiLearn.h"
 #include "midi/MidiMonitor.h"
@@ -157,17 +158,25 @@ private:
         sEnvAmount,
         sFilterSustain,
         sAmpSustain,
+        sMasterTune,
+        sPmFilterEnv,
+        sPmOscB,
+        sWheelAmount,
+        sWheelSource,
         kNumSmoothed
     };
 
     struct Indices
     {
-        int oscAFreq, oscASaw, oscAPulse, oscAPw;
-        int oscBFreq, oscBFine, oscBSaw, oscBTri, oscBPulse, oscBPw, oscBKbd;
+        int oscAFreq, oscASaw, oscAPulse, oscAPw, oscASync;
+        int oscBFreq, oscBFine, oscBSaw, oscBTri, oscBPulse, oscBPw, oscBLoFreq, oscBKbd;
         int mixOscA, mixOscB, mixNoise;
         int fltCutoff, fltRes, fltEnvAmt, fltKbd;
         int fenvAttack, fenvDecay, fenvSustain, fenvRelease;
         int aenvAttack, aenvDecay, aenvSustain, aenvRelease;
+        int pmFiltEnv, pmOscB, pmDestFreqA, pmDestPwA, pmDestFilter;
+        int lfoRate, lfoShape;
+        int wmMix, wmDestFreqA, wmDestFreqB, wmDestPwA, wmDestPwB, wmDestFilter;
         int masterTune, masterVolume, bendRange, perfVoices;
     };
 
@@ -208,8 +217,10 @@ private:
 
     // Internal-rate smoothers and their per-sample arrays (length = 2 × chunk capacity).
     p5x::dsp::LinearSmoother bendSmoother, tuneSmoother, pwASmoother, pwBSmoother, fineBSmoother, mixASmoother,
-        mixBSmoother, mixNoiseSmoother, resSmoother, envAmtSmoother, fSustainSmoother, aSustainSmoother;
+        mixBSmoother, mixNoiseSmoother, resSmoother, envAmtSmoother, fSustainSmoother, aSustainSmoother,
+        pmFilterEnvSmoother, pmOscBSmoother, wheelSmoother;
     p5x::dsp::LogSmoother cutoffSmoother;
+    p5x::dsp::WheelModSource wheelModSource; // host rate, interpolated up
     std::array<std::vector<float>, kNumSmoothed> smoothed;
 
     // Host-rate output stage.
@@ -225,6 +236,8 @@ private:
     double testTonePhase = 0.0;
     int testToneRemaining = 0;
     float cpuSmoothed = 0.0f;
+    std::array<float, p5x::debug::kScopeSamples> scopeRing {}; // last output samples, for the scope
+    int scopeWrite = 0;
     uint32_t xruns = 0;
 
     // Cross-thread

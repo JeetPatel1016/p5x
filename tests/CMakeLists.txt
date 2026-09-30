@@ -18,6 +18,7 @@ set(SUPPORT_SOURCES
 set(UNIT_TEST_SOURCES
     dsp/EnvelopeTests.cpp
     dsp/LadderFilterTests.cpp
+    dsp/ModulationSourceTests.cpp
     dsp/OscillatorTests.cpp
     dsp/OutputStageTests.cpp
     dsp/RandomTests.cpp
@@ -51,6 +52,7 @@ set(PLUGIN_TEST_SOURCES
     plugin/AliasingTests.cpp
     plugin/EngineTests.cpp
     plugin/GoldenTests.cpp
+    plugin/ModulationTests.cpp
     plugin/IdentityTests.cpp
     plugin/ParameterTests.cpp
     plugin/PerformanceTests.cpp

@@ -23,7 +23,7 @@ Toggled by the Debug button (LED lit while open). Available in all builds. Match
 - **Voices table:** from telemetry.
 - **MIDI map:** CC → parameter list (tab next to MIDI monitor).
 - **CPU card:** CPU %, rate, block size, OS factor, xruns.
-- **Scope:** last 512 output samples, triggered on rising zero crossing.
+- **Scope:** last 512 output samples, triggered on rising zero crossing. Auto-scaled: the trace peak fills ~90 % of the height (zoom ×1–×64, instant rise, slow fall); the true peak in dBFS and the zoom are shown.
 - **Dump state:** writes `%APPDATA%/P5X/dumps/p5x-dump-<timestamp>.txt` with every parameter (ID, real value), MIDI map, settings, seed, voice snapshot, build info (version, git hash, build type).
 
 ## Standalone test harness

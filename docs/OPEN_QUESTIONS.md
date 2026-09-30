@@ -5,7 +5,6 @@
 | # | Question | Current placeholder | Blocking at |
 |---|---|---|---|
 | 1 | Verify against the Rev 3 technical manual: oscillator frequency knob span and stepping (currently ±24 semitones, semitone steps) | as in 01-parameters.md | milestone 4 tuning |
-| 2 | Verify: does Osc B with Kbd off also ignore pitch bend and glide? And master tune? (02 drops master tune too; on the hardware master tune likely feeds every VCO, so rec.: master tune still applies) | ignores bend, glide and master tune | milestone 3 |
 | 3 | Verify: first note after idle glides from the voice's last note, or no glide? | glides from last note | milestone 4 |
 | 4 | Envelope time ranges (A 1 ms–10 s, D/R 1 ms–15 s): check against hardware measurements if available | P5X values | milestone 4 |
 | 5 | LFO shapes: the hardware may allow combining shapes; we use a single choice. Keep radio? | radio | milestone 5 |
@@ -17,7 +16,6 @@
 | 13 | Where does the preset **name** show? The chosen look has a 3-digit 7-segment readout, which can only show the number | small light-grey text line under the display | milestone 5 |
 | 14 | The Main panel layout (control positions) only exists in the design canvas on claude.ai, which Claude Code can't open. Ask the user for a starting `art/layout.json` before milestone 5a | none in repo | milestone 5a |
 | 15 | The Audio/MIDI settings and Debug console artboards aren't in the repo either. Screenshots or a description are needed to match them | plain functional layout, palette + Kode Mono | milestone 5 |
-| 28 | Poly-Mod Osc B source is labelled ±1, but B's raw summed waveform reaches ±3 with all shapes on (02 doesn't normalise). Rec.: use the raw sum and fix the label | raw sum | milestone 3 |
 | 29 | Glide for a voice's very first note (no previous note). Rec.: no glide | unspecified | milestone 4 |
 | 30 | Unison with the sustain pedal: does the note stack keep pedal-held notes? | unspecified | milestone 4 |
 | 31 | Accent colour for code-drawn overlays on the panel (learn ring, tooltips): 08 palette `#F0A93B` vs style.json `#EEC985`. Rec.: style.json on the panel; the 08 palette for the flat Debug/Settings windows | 08 palette | milestone 5 |

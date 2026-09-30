@@ -38,7 +38,7 @@ void Voice::reset() noexcept
     ampEnvelope.reset();
     filter.reset();
     dcIn = dcOut = 0.0;
-    lastOscAHz = lastCutoffHz = 0.0f;
+    lastOscAHz = lastOscBHz = lastCutoffHz = 0.0f;
 }
 
 void Voice::start (int midiNote, float velocity01) noexcept
@@ -75,14 +75,54 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // 2. Osc B. With Kbd off it plays a fixed C4 and ignores bend and master tune (02-oscillators.md).
-        const double noteB = in.oscBKeyboard ? playedNote + in.oscBFreq + in.fineB[i] * 0.01 + in.pitchOffset[i]
-                                             : 60.0 + in.oscBFreq + in.fineB[i] * 0.01;
-        const float b = oscB.process (noteToHz (noteB), in.pwB[i], in.shapesB);
+        // Modulation sources for this sample. Destinations that are off add nothing, and a source at
+        // zero adds exactly zero, so both render bit-identically to no modulation (05 § Tests).
+        const float wm = in.wheelModSource[i] * in.wheelModAmount[i];
 
-        // 4. Osc A (Poly-Mod, Wheel-Mod and sync arrive in milestone 3).
-        const double freqA = noteToHz (playedNote + in.oscAFreq + in.pitchOffset[i]);
-        const float a = oscA.process (freqA, in.pwA[i], in.shapesA);
+        // The filter envelope feeds both the filter and Poly-Mod (after velocity scaling).
+        filterParams.sustain = in.filterSustain[i];
+        const float filterEnv = filterEnvelope.process (filterParams) * velocityFactor;
+
+        // 2. Osc B. With Kbd off it plays a fixed C4 and ignores bend (02-oscillators.md § Pitch).
+        double noteB = in.oscBKeyboard ? playedNote + in.oscBFreq + in.fineB[i] * 0.01 + in.pitchOffset[i]
+                                       : 60.0 + in.oscBFreq + in.fineB[i] * 0.01 + in.masterTune[i];
+        float pwB = in.pwB[i];
+
+        if (in.wmFreqB)
+            noteB += kWheelModSemitones * wm;
+
+        if (in.wmPwB)
+            pwB += kModPulseWidth * wm;
+
+        double freqB = noteToHz (noteB);
+
+        if (in.oscBLoFreq)
+            freqB /= kLoFreqDivisor;
+
+        const float b = oscB.process (freqB, pwB, in.shapesB);
+
+        // 3. Poly-Mod: audio rate, from B's raw summed output (05-modulation.md § Poly-Mod).
+        const float pm = in.pmFilterEnv[i] * filterEnv + in.pmOscB[i] * b;
+
+        // 4. Osc A, hard-synced to B's wrap when Sync is on.
+        double noteA = playedNote + in.oscAFreq + in.pitchOffset[i];
+        float pwA = in.pwA[i];
+
+        if (in.wmFreqA)
+            noteA += kWheelModSemitones * wm;
+
+        if (in.pmFreqA)
+            noteA += kPolyModSemitones * pm;
+
+        if (in.wmPwA)
+            pwA += kModPulseWidth * wm;
+
+        if (in.pmPwA)
+            pwA += kModPulseWidth * pm;
+
+        const double freqA = noteToHz (noteA);
+        const double syncAt = in.syncA && oscB.wrappedThisSample() ? oscB.wrapFraction() : -1.0;
+        const float a = oscA.process (freqA, pwA, in.shapesA, syncAt);
 
         // 5. Mixer
         float mix = a * in.mixA[i] + b * in.mixB[i] + random.nextBipolar() * in.mixNoise[i] * kNoiseLevel;
@@ -91,9 +131,14 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
             mix += in.externalInput[i];
 
         // 6. Filter; cutoff in octaves relative to the knob (03-filter.md § Cutoff computation).
-        filterParams.sustain = in.filterSustain[i];
-        const float filterEnv = filterEnvelope.process (filterParams) * velocityFactor;
-        const double octaves = in.envAmount[i] * 8.0 * filterEnv + keyboardOctaves;
+        double octaves = in.envAmount[i] * 8.0 * filterEnv + keyboardOctaves;
+
+        if (in.wmFilter)
+            octaves += kWheelModOctaves * wm;
+
+        if (in.pmFilter)
+            octaves += kPolyModOctaves * pm;
+
         const auto cutoff = (float) (in.cutoffHz[i] * std::exp2 (octaves));
         const float filtered = filter.process (mix * kFilterDrive, cutoff, in.resonance[i]);
 
@@ -110,7 +155,8 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
 
         if (i == numSamples - 1 || ampEnvelope.isIdle())
         {
-            lastOscAHz = (float) std::min (freqA, 0.45 * rate);
+            lastOscAHz = (float) std::clamp (freqA, 0.01, 0.45 * rate);
+            lastOscBHz = (float) std::clamp (freqB, 0.01, 0.45 * rate);
             lastCutoffHz = (float) std::clamp ((double) cutoff, 5.0, 0.45 * rate);
         }
 
