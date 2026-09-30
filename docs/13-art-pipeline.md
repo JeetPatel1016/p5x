@@ -19,13 +19,13 @@ Every control's position lives in one file, used by **both** the Blender panel s
   ],
   "areas": [
     { "id": "preset_display", "x": 520, "y": 14, "w": 280, "h": 36 },
-    { "id": "keyboard", "x": 150, "y": 490, "w": 1210, "h": 100 }
+    { "id": "keyboard", "x": 150, "y": 490, "w": 1188, "h": 100 }
   ],
   "sections": [ { "title": "FILTER", "x": 560, "y": 240, "w": 330, "h": 150 } ]
 }
 ```
 - `x`, `y` = control centre in base (1× @ 100 %) pixels.
-- CMake copies `layout.json` into BinaryData; the editor reads it at construction. A unit test checks every parameter in 01-parameters.md (except `bend_range`) appears exactly once in `controls`, and no unknown IDs appear.
+- CMake copies `layout.json` into BinaryData; the editor reads it at construction. A unit test checks every parameter in 01-parameters.md (except `bend_range`) appears exactly once in `controls`, and no unknown IDs appear. (Choice params drawn as button groups: OPEN_QUESTIONS #32.)
 - Starting positions come from the Main panel artboard, which isn't in the repo (see OPEN_QUESTIONS #14): ask the user for a starting `layout.json` before milestone 5a. After that, adjust positions in `layout.json` only.
 
 ## Asset list
@@ -37,8 +37,8 @@ Every control's position lives in one file, used by **both** the Blender panel s
 | Button (square, whole cap backlit, no text) | 4: off, on, off-pressed, on-pressed | 34 × 24 | 68 × 48 | `button.png` (vertical strip, transparent) |
 | Pitch wheel | 65 frames, full down → full up | 26 × 70 | 52 × 140 | `wheel_pitch.png` |
 | Mod wheel | 65 frames, 0 → max | 26 × 70 | 52 × 140 | `wheel_mod.png` |
-| White key | 2: up, down | 55 × 100 | 110 × 200 | `key_white.png` |
-| Black key | 2: up, down | 30 × 62 | 60 × 124 | `key_black.png` |
+| White key | 2: up, down | 33 × 100 | 66 × 200 | `key_white.png` (61 keys = 36 white keys × 33 px = 1188 px) |
+| Black key | 2: up, down | 20 × 62 | 40 × 124 | `key_black.png` |
 | Debug / Settings windows | – | – | – | stay code-drawn (flat), no art |
 
 Output folder: `Resources/ui/1x/` and `Resources/ui/2x/`. Rendered PNGs are **committed** (CI doesn't run Blender). Budget: all UI assets together < 25 MB.

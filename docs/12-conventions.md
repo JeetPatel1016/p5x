@@ -15,7 +15,7 @@
 - Comments explain *why* (and cite the doc section: `// see 03-filter.md § Self-oscillation`), not *what*.
 
 ## Dependencies
-Allowed now: JUCE 8 (AGPLv3), Catch2 v3 (BSL-1.0), Kode Mono font (SIL OFL 1.1), fontTools (MIT, build-time only, to make static font instances). Anything else: ask first, then add to THIRD_PARTY.md.
+Allowed now: JUCE 8 (AGPLv3), Catch2 v3 (BSL-1.0), Kode Mono font (SIL OFL 1.1), fontTools (MIT, build-time only, to make static font instances), Steinberg ASIO SDK (GPLv3 option of its dual license, fetched at build time and never committed; a paid release needs Steinberg's proprietary ASIO license instead). Anything else: ask first, then add to THIRD_PARTY.md.
 
 ## Git
 - Branch per milestone: `m1-skeleton`, `m2-core-voice`, … Merge to `main` only when the milestone's definition of done is met.

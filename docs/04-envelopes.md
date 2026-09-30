@@ -52,5 +52,5 @@ Velocity scaling is applied by the voice, not inside the envelope (05-modulation
 - Release 0.5 s from 1.0: level ≤ 0.001 at 0.5 s ± 2 %; Idle (level < 1e-5) at 0.83 s ± 2 %; level monotonic decreasing.
 - Retrigger during Release at level 0.3: next sample ≥ 0.3 (no drop to 0).
 - gateOff during Attack at level 0.5: next sample ≤ 0.5 and decreasing.
-- Changing sustain while in Sustain moves the level smoothly (no step > 0.01 per sample).
+- Changing sustain while in Sustain moves the level smoothly (no step > 0.01 per sample), with the Lin 20 sustain smoother from 01-parameters.md in front of the envelope.
 - Extreme params (0.001 s everywhere, 15 s everywhere) → no NaN, correct stage order.

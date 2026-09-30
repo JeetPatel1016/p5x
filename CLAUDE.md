@@ -16,7 +16,7 @@ The author and vendor is **Jeet Patel**. It must show up everywhere a host or th
 | `BUNDLE_ID` | `com.jeetpatel.p5x` |
 | `PLUGIN_MANUFACTURER_CODE` | `JtPl` |
 | `PLUGIN_CODE` | `P5xS` |
-| `VERSION` | `0.1.0` (bump the minor version at each finished milestone) |
+| `VERSION` | `0.1.1` (milestone N ships as `0.N.0`; fixes between milestones bump the patch: `0.1.1`, `0.1.2`, …) |
 | `IS_SYNTH` / `NEEDS_MIDI_INPUT` | `TRUE` / `TRUE` |
 | `VST3_CATEGORIES` | `Instrument Synth` |
 | `FORMATS` | `VST3 Standalone` |
@@ -28,13 +28,13 @@ The author and vendor is **Jeet Patel**. It must show up everywhere a host or th
 - A plugin test asserts `JucePlugin_Manufacturer == "Jeet Patel"` and `JucePlugin_Name == "P5X"`.
 
 ## Environment and getting started
-- **Machine:** Windows 11 (Lenovo Legion 5), Arturia KeyLab Essential mk3 as the MIDI controller.
+- **Machine:** Windows 11 (Lenovo Legion 5), Arturia KeyLab Essential mk3 (61 keys) as the MIDI controller. P5X plays 61 keys: MIDI notes 36–96.
 - **Installed by the user:** Visual Studio 2022 (MSVC, C++ desktop workload), CMake, Git.
 - **Folder layout** (`Desktop\p5x\`):
-  - `dev\`: **this repo** (git initialised on `main`, nothing committed yet; `.gitignore` and `.gitattributes` in place).
+  - `dev\`: **this repo** (git on `main`; specs committed 2026-09-29; milestone work happens on `m*` branches).
   - `tools\pluginval\pluginval.exe`: pluginval v1.0.4. Run it from `dev` as `..\tools\pluginval\pluginval.exe --strictness-level 5 --validate-in-process --skip-gui-tests <path-to>\P5X.vst3`. It's GPL, so it stays outside the repo and is never linked.
   - `artwork\concepts\`: concept images and prompts (reference only, not part of the repo).
-- **Fetched by CMake (`FetchContent`):** JUCE 8 (pin the latest 8.x release tag; record the tag in DECISIONS.md) and Catch2 v3.
+- **Fetched by CMake (`FetchContent`):** JUCE 8.0.15, Catch2 v3.16.0 and the Steinberg ASIO SDK (see DECISIONS.md). Change a pinned version only with the user's approval and a DECISIONS.md line.
 - **Font:** already in `Resources/fonts/KodeMono/`.
 - **Not installed yet:** Blender 4.2 LTS (needed at milestone 5) and a DAW for manual testing (ask the user which one when milestone 1 is ready to test).
 - **CI:** there's no GitHub remote yet. Until the user creates one, run the build, tests and pluginval locally and report the results; write the GitHub Actions workflow anyway so it's ready.
@@ -85,6 +85,7 @@ The plan is open source now (GPL-3.0) with the option to sell later. That only w
 - **Write all code from scratch.** Don't copy, paste or closely translate code from any GPL/AGPL/LGPL project (OB-Xd, Surge, Vital/Helm, Dexed, Autodafe VES, the NI Pro-53 Cmajor port, etc.). Reading them to understand an approach is fine; reproducing them is not.
 - Algorithms from papers and books (ZDF filters, PolyBLEP, etc.) are fine to implement in our own words.
 - Only add dependencies with permissive licenses (MIT, BSD, Apache, ISC, zlib, SIL OFL for fonts). Ask before adding any dependency at all.
+- Approved exception: the Steinberg ASIO SDK under the GPLv3 option of its dual license (fine while P5X is GPL; a paid release needs Steinberg's proprietary ASIO license). Never commit the SDK.
 - Keep `THIRD_PARTY.md` listing every dependency and its license.
 - `LICENSE` = GPL-3.0. `CONTRIBUTING.md` states outside contributions need copyright assignment (or a CLA).
 - **JUCE 8** is used under AGPLv3 while open source. Before any paid release it needs a commercial JUCE license; note this in `THIRD_PARTY.md`.

@@ -12,7 +12,7 @@ Per internal sample:
 6. Filter (cutoff per 03-filter.md).
 7. VCA: `× ampEnv × velocityGain`.
 8. DC blocker: one-pole high-pass at 5 Hz.
-9. Add to the shared oversampled buffer × **voice gain 0.3** (P5X headroom: 5 voices of full saw stay mostly below 0 dBFS).
+9. Add to the shared oversampled buffer × **voice gain 0.16** (P5X headroom: 5 full-level voices sum to at most 0.8, so with the default voice count the safety clipper never engages; with 8 or 10 voices dense chords can reach its knee).
 
 ## Voice count
 - `perf_voices` = 5 / 8 / 10. Allocate 10 voices always; the parameter sets how many are active.
@@ -33,7 +33,7 @@ In order:
 
 ## Unison (`perf_unison`)
 - All active voices play one note: **last-note priority**. Releasing the current note returns to the most recent still-held note (note stack of 16, drop oldest when full).
-- Each new note retriggers envelopes on all voices (from current level).
+- Each new note retriggers envelopes on all voices (from current level). Interaction with the sustain pedal is open (OPEN_QUESTIONS #30).
 - Detune spread: voice `i` of `N` gets `(i/(N-1) - 0.5) × 14 cents` (±7 cents total spread), plus its Vintage offsets.
 - Output gain in unison: voice gain × `1 / sqrt(N)` × 1.5 so unison is louder than one voice but doesn't clip hard. (P5X.)
 - Switching unison on/off: all voices get `gateOff()` first, then the new mode takes effect.
@@ -42,10 +42,11 @@ In order:
 - Constant-time glide: each voice moves from its previous note to the new note in `perf_glide` seconds, linearly in semitones.
 - In poly mode each voice glides from **its own** last note. In unison all voices glide together from the previous unison note.
 - `perf_glide = 0` → instant (no computation).
+- A voice's very first note (no previous note): open, OPEN_QUESTIONS #29.
 - First note after a voice was idle glides from that voice's last note (hardware behaviour). (Verify; see OPEN_QUESTIONS.)
 
 ## Vintage (`perf_vintage`, 0–1)
-Per voice, drawn once from the seeded `Random` at `prepare` (so it's reproducible across reloads) and scaled by the knob:
+Per voice, drawn once from the seeded `Random` at `prepare` and scaled by the knob. Every `prepare` re-seeds each per-voice `Random` from the instance `seed` and the voice index, so repeated `prepare` calls and reloads give the same values:
 | Offset | At Vintage = 1 |
 |---|---|
 | Static detune Osc A, Osc B (independent) | uniform ±8 cents |
@@ -56,7 +57,7 @@ At Vintage = 0 every offset is exactly 0 and output is identical to a "perfect" 
 
 ## Output stage (after downsampling, host rate)
 1. `× master_volume` (dB → gain, −60 dB = 0).
-2. **Safety clipper:** `y = tanh(x)` for |x| > 0.8, identity below, with a continuous transition (P5X; keeps a runaway patch from reaching the host at full scale). Log WARN when engaged (rate-limited 1/s).
+2. **Safety clipper:** identity for |x| ≤ 0.8; above that `y = sign(x) · (0.8 + 0.2 · tanh((|x| − 0.8) / 0.2))`, continuous in value and slope, never beyond ±1.0 (P5X; keeps a runaway patch or a dense chord at full master volume from hard-clipping at the host or sound card). Log WARN when engaged (rate-limited 1/s). In place since 0.1.1 (`dsp/OutputStage.h`).
 3. Mono → both output channels.
 
 ## Oversampling modes

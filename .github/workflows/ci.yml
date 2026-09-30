@@ -1,0 +1,66 @@
+# P5X — Copyright (c) 2026 Jeet Patel. Licensed under GPL-3.0-or-later.
+#
+# docs/11-testing.md § Tooling: Release and Debug builds on windows-latest, both test targets,
+# pluginval at strictness 5, VST3 + Standalone artifacts.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/*-subbuild
+          key: deps-${{ hashFiles('cmake/Dependencies.cmake') }}
+
+      - name: Configure
+        run: cmake --preset vs2022
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.config == 'Debug' && 'debug' || 'release' }} --parallel
+
+      - name: Test
+        run: ctest --preset ${{ matrix.config == 'Debug' && 'debug' || 'release' }} --output-on-failure
+
+      - name: Download pluginval 1.0.4
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+
+      - name: pluginval (strictness 5)
+        shell: pwsh
+        run: |
+          .\pluginval\pluginval.exe --strictness-level 5 --validate-in-process --skip-gui-tests `
+            "build\P5X_artefacts\${{ matrix.config }}\VST3\P5X.vst3"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package
+        if: matrix.config == 'Release'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item -Recurse "build\P5X_artefacts\Release\VST3\P5X.vst3" package\
+          Copy-Item "build\P5X_artefacts\Release\Standalone\P5X.exe" package\
+          Copy-Item LICENSE, THIRD_PARTY.md, README.md package\
+          Copy-Item Resources\fonts\KodeMono\OFL.txt package\KodeMono-OFL.txt
+
+      - name: Upload artifacts
+        if: matrix.config == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: P5X-${{ github.sha }}
+          path: package
