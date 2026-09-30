@@ -128,6 +128,8 @@ public:
         P5X_LOG (Info, Standalone, instanceId(), "Audio device restarted");
     }
 
+    void setInputMuted (bool muted) override { holder.shouldMuteInput.setValue (muted); }
+
     bool isComputerKeyboardEnabled() const override { return computerKeyboardEnabled; }
 
     void setComputerKeyboardEnabled (bool enabled) override
@@ -218,7 +220,7 @@ public:
         const auto savedDevice = savedSetup != nullptr ? savedSetup->getStringAttribute ("audioOutputDeviceName") : juce::String();
 
         juce::Array<juce::StandalonePluginHolder::PluginInOuts> channels;
-        channels.add ({ 0, 2 }); // no inputs until "Route input into filter" (milestone 2), stereo out
+        channels.add ({ 2, 2 }); // stereo in (for "Route input into filter") and stereo out
         holder = std::make_unique<juce::StandalonePluginHolder> (properties.get(), false, juce::String(), nullptr,
                                                                  channels, false);
 
@@ -252,6 +254,24 @@ public:
 
         if (! isRunning())
             P5X_LOG (Error, Standalone, id, "No audio device is running; choose one in Settings");
+
+        // First launch: no input device until the user picks one (no microphone opened by surprise).
+        if (savedSetup == nullptr)
+        {
+            auto setup = deviceManager.getAudioDeviceSetup();
+
+            if (setup.inputDeviceName.isNotEmpty())
+            {
+                setup.inputDeviceName = {};
+                setup.inputChannels.clear();
+                setup.useDefaultInputChannels = false;
+                deviceManager.setAudioDeviceSetup (setup, true);
+            }
+        }
+
+        // "Route input into filter" is always off at launch (10-debug-and-harness.md); the holder
+        // mutes the input until it's switched on.
+        holder->shouldMuteInput.setValue (true);
 
         if (auto* device = deviceManager.getCurrentAudioDevice(); device != nullptr && isRunning())
             P5X_LOG (Info, Standalone, id, "Audio: %s / %s, %.0f Hz, %d samples", device->getTypeName().toRawUTF8(),

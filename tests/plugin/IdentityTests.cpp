@@ -13,7 +13,7 @@ TEST_CASE ("Identity: vendor, name, version and codes", "[plugin][identity]")
 {
     REQUIRE (juce::String (JucePlugin_Manufacturer) == "Jeet Patel");
     REQUIRE (juce::String (JucePlugin_Name) == "P5X");
-    REQUIRE (juce::String (JucePlugin_VersionString) == "0.1.1");
+    REQUIRE (juce::String (JucePlugin_VersionString) == "0.2.0");
     REQUIRE (JucePlugin_ManufacturerCode == 0x4a74506c); // 'JtPl'
     REQUIRE (JucePlugin_PluginCode == 0x50357853);       // 'P5xS'
     REQUIRE (juce::String (P5X_STRINGIFY (JucePlugin_CFBundleIdentifier)) == "com.jeetpatel.p5x");

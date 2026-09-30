@@ -13,7 +13,7 @@ namespace p5x::standalone
 {
 // Audio/MIDI settings (10-debug-and-harness.md § Standalone test harness). Plain functional layout
 // until the artboard arrives (OPEN_QUESTIONS #15). In the plugin build it shows only the MIDI and
-// HQ items. The Standalone input and "Route input into filter" arrive in milestone 2.
+// HQ items; the Standalone adds the audio device section and "Route input into filter".
 class SettingsDialog : public juce::Component, private juce::Timer
 {
 public:
@@ -44,7 +44,8 @@ private:
     juce::Label audioHeading, midiHeading, footer, hqNote, mappingsLabel;
 
     juce::ComboBox channelBox, takeoverBox;
-    juce::ToggleButton programChangeToggle, hqToggle, computerKeyboardToggle;
+    juce::ToggleButton programChangeToggle, hqToggle, computerKeyboardToggle, routeInputToggle;
+    juce::Label routeInputLabel;
     juce::Slider bendRangeSlider;
     std::unique_ptr<juce::SliderParameterAttachment> bendRangeAttachment;
     juce::TextButton saveMapButton { "Save as default map" }, clearMapButton { "Clear all" };

@@ -16,7 +16,7 @@ The author and vendor is **Jeet Patel**. It must show up everywhere a host or th
 | `BUNDLE_ID` | `com.jeetpatel.p5x` |
 | `PLUGIN_MANUFACTURER_CODE` | `JtPl` |
 | `PLUGIN_CODE` | `P5xS` |
-| `VERSION` | `0.1.1` (milestone N ships as `0.N.0`; fixes between milestones bump the patch: `0.1.1`, `0.1.2`, …) |
+| `VERSION` | `0.2.0` (milestone N ships as `0.N.0`; fixes between milestones bump the patch: `0.1.1`, `0.1.2`, …) |
 | `IS_SYNTH` / `NEEDS_MIDI_INPUT` | `TRUE` / `TRUE` |
 | `VST3_CATEGORIES` | `Instrument Synth` |
 | `FORMATS` | `VST3 Standalone` |

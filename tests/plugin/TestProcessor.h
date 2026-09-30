@@ -30,6 +30,15 @@ inline float getParam (P5XAudioProcessor& p, const char* id)
     return parameter.convertFrom0to1 (parameter.getValue());
 }
 
+// A near-sine patch for pitch measurements: Osc A saw only, low fixed cutoff, no filter envelope,
+// so each period has one rising zero crossing.
+inline void setPurePatch (P5XAudioProcessor& p)
+{
+    setParam (p, "mix_osc_b", 0.0f);
+    setParam (p, "flt_cutoff", 700.0f);
+    setParam (p, "flt_env_amt", 0.0f);
+}
+
 struct TimedMessage
 {
     juce::MidiMessage message;

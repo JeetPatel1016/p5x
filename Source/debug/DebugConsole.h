@@ -2,6 +2,7 @@
 #pragma once
 
 #include "debug/DebugLog.h"
+#include "debug/Telemetry.h"
 #include "midi/MidiMonitor.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -12,8 +13,8 @@ class P5XAudioProcessor;
 
 namespace p5x::debug
 {
-// Debug console, milestone 1 parts: log, MIDI monitor, MIDI map (10-debug-and-harness.md).
-// Voices table and CPU card arrive in milestone 2, the scope in 3, Dump state in 6.
+// Debug console (10-debug-and-harness.md): log, MIDI monitor, MIDI map, Voices table and CPU card.
+// The scope arrives in milestone 3, Dump state in 6.
 class DebugConsole : public juce::Component, private juce::Timer
 {
 public:
@@ -27,6 +28,7 @@ private:
     class LogModel;
     class MonitorModel;
     class MapModel;
+    class VoicesModel;
 
     void timerCallback() override;
     void rebuildVisibleLog();
@@ -42,7 +44,9 @@ private:
     std::unique_ptr<LogModel> logModel;
     std::unique_ptr<MonitorModel> monitorModel;
     std::unique_ptr<MapModel> mapModel;
-    juce::ListBox logList, monitorList, mapList;
+    std::unique_ptr<VoicesModel> voicesModel;
+    juce::ListBox logList, monitorList, mapList, voicesList;
+    juce::Label cpuCard;
 
     std::vector<LogEntry> entries;        // this instance's entries plus global ones
     std::vector<const LogEntry*> visible; // after the level filter

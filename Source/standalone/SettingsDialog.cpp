@@ -35,10 +35,23 @@ SettingsDialog::SettingsDialog (P5XAudioProcessor& p)
     if (isStandalone)
     {
         heading (audioHeading, "AUDIO");
-        // Output device only in milestone 1; the input returns with "Route input into filter" (milestone 2).
         deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent> (getServices()->getDeviceManager(),
-                                                                               0, 0, 2, 2, true, false, true, false);
+                                                                               0, 2, 2, 2, true, false, true, false);
         addAndMakeVisible (*deviceSelector);
+
+        // The selected input's first channel goes into every voice's mixer at unity. Off at launch
+        // and never saved, to avoid feedback surprises (10-debug-and-harness.md).
+        routeInputLabel.setText ("Route input into filter", juce::dontSendNotification);
+        routeInputLabel.setColour (juce::Label::textColourId, ui::colours::label);
+        addAndMakeVisible (routeInputLabel);
+        routeInputToggle.setToggleState (processor.isRoutingInput(), juce::dontSendNotification);
+        routeInputToggle.onClick = [this]
+        {
+            const bool on = routeInputToggle.getToggleState();
+            processor.setRouteInput (on);
+            getServices()->setInputMuted (! on);
+        };
+        addAndMakeVisible (routeInputToggle);
     }
 
     heading (midiHeading, "MIDI");
@@ -138,7 +151,7 @@ SettingsDialog::SettingsDialog (P5XAudioProcessor& p)
     timerCallback();
     startTimerHz (4);
 
-    const int height = (isStandalone ? 30 + kDeviceSelectorHeight : 0) + 30 + (int) rows.size() * kRowHeight + 110;
+    const int height = (isStandalone ? 30 + kDeviceSelectorHeight + kRowHeight : 0) + 30 + (int) rows.size() * kRowHeight + 110;
     setSize (kWidth, height);
 }
 
@@ -171,6 +184,9 @@ void SettingsDialog::resized()
     {
         audioHeading.setBounds (area.removeFromTop (26));
         deviceSelector->setBounds (area.removeFromTop (kDeviceSelectorHeight));
+        auto routeRow = area.removeFromTop (kRowHeight).reduced (0, 3);
+        routeInputLabel.setBounds (routeRow.removeFromLeft (kLabelWidth));
+        routeInputToggle.setBounds (routeRow.removeFromLeft (40));
     }
 
     midiHeading.setBounds (area.removeFromTop (26));

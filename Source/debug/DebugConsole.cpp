@@ -161,6 +161,48 @@ private:
     std::map<int, juce::String> current;
 };
 
+class DebugConsole::VoicesModel : public juce::ListBoxModel
+{
+public:
+    void update (const TelemetrySnapshot& s) { snapshot = s; }
+
+    int getNumRows() override { return snapshot.voiceCount; }
+
+    void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override
+    {
+        if (row < 0 || row >= TelemetrySnapshot::kMaxVoices)
+            return;
+
+        drawRowBackground (g, row, selected, width, height);
+        const auto& v = snapshot.voices[(size_t) row];
+        auto area = juce::Rectangle<int> (width, height).reduced (6, 0);
+        g.setFont (ui::LookAndFeelP5X::font (12.0f));
+
+        static const char* states[] = { "idle", "on", "release", "sustained" };
+        static const char* stages[] = { "Idle", "Attack", "Decay", "Sustain", "Release" };
+        const bool idle = v.state == VoiceTelemetry::State::Idle;
+
+        g.setColour (idle ? ui::colours::labelDim.withAlpha (0.5f) : ui::colours::text);
+        g.drawText ("#" + juce::String (row + 1), area.removeFromLeft (40), juce::Justification::centredLeft);
+        g.drawText (states[(int) v.state], area.removeFromLeft (80), juce::Justification::centredLeft);
+
+        if (idle)
+            return;
+
+        g.drawText (juce::MidiMessage::getMidiNoteName (v.note, true, true, 4) + " (" + juce::String (v.note) + ")",
+                    area.removeFromLeft (90), juce::Justification::centredLeft);
+        g.drawText ("vel " + juce::String (v.velocity, 2), area.removeFromLeft (80), juce::Justification::centredLeft);
+        g.drawText ("Osc A " + juce::String (v.oscAHz, 1) + " Hz", area.removeFromLeft (140), juce::Justification::centredLeft);
+        g.drawText ("cutoff " + juce::String (juce::roundToInt (v.cutoffHz)) + " Hz", area.removeFromLeft (140),
+                    juce::Justification::centredLeft);
+        g.drawText (juce::String ("amp ") + stages[juce::jlimit (0, 4, (int) v.ampStage)] + " " + juce::String (v.ampLevel, 2),
+                    area, juce::Justification::centredLeft);
+    }
+
+private:
+    TelemetrySnapshot snapshot;
+};
+
 //==================================================================================================
 DebugConsole::DebugConsole (P5XAudioProcessor& p)
     : processor (p)
@@ -168,18 +210,27 @@ DebugConsole::DebugConsole (P5XAudioProcessor& p)
     logModel = std::make_unique<LogModel> (*this);
     monitorModel = std::make_unique<MonitorModel> (processor);
     mapModel = std::make_unique<MapModel> (processor);
+    voicesModel = std::make_unique<VoicesModel>();
 
     logList.setModel (logModel.get());
     monitorList.setModel (monitorModel.get());
     mapList.setModel (mapModel.get());
+    voicesList.setModel (voicesModel.get());
 
-    for (auto* list : { &logList, &monitorList, &mapList })
+    for (auto* list : { &logList, &monitorList, &mapList, &voicesList })
         list->setRowHeight (20);
 
     const auto background = ui::colours::sectionBg;
     tabs.addTab ("Log", background, &logList, false);
     tabs.addTab ("MIDI monitor", background, &monitorList, false);
     tabs.addTab ("MIDI map", background, &mapList, false);
+    tabs.addTab ("Voices", background, &voicesList, false);
+
+    // CPU card: CPU %, rate, block size, oversampling factor, xruns.
+    cpuCard.setFont (ui::LookAndFeelP5X::font (12.0f));
+    cpuCard.setColour (juce::Label::textColourId, ui::colours::text);
+    cpuCard.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (cpuCard);
     tabs.setTabBarDepth (28);
     addAndMakeVisible (tabs);
 
@@ -208,7 +259,7 @@ DebugConsole::DebugConsole (P5XAudioProcessor& p)
     }
 
     // Show what's already in the shared history for this instance.
-    setSize (900, 560);
+    setSize (1120, 560);
     timerCallback();
     startTimerHz (30);
 }
@@ -217,7 +268,7 @@ DebugConsole::~DebugConsole()
 {
     stopTimer();
 
-    for (auto* list : { &logList, &monitorList, &mapList })
+    for (auto* list : { &logList, &monitorList, &mapList, &voicesList })
         list->setModel (nullptr);
 }
 
@@ -242,6 +293,8 @@ void DebugConsole::resized()
     for (auto& chip : levelChips)
         chip.setBounds (header.removeFromLeft (84));
 
+    cpuCard.setBounds (header);
+
     area.removeFromTop (8);
     tabs.setBounds (area);
 }
@@ -250,6 +303,16 @@ void DebugConsole::timerCallback()
 {
     if (pauseButton.getToggleState())
         return;
+
+    // Voices table and CPU card from telemetry.
+    const auto t = processor.getTelemetry();
+    voicesModel->update (t);
+    voicesList.updateContent();
+    voicesList.repaint();
+    cpuCard.setText (juce::String (juce::CharPointer_UTF8 ("CPU ")) + juce::String (t.cpuPercent, 1) + "%  |  "
+                         + juce::String (juce::roundToInt (t.sampleRate)) + " Hz  |  block " + juce::String (t.blockSize)
+                         + "  |  " + juce::String (t.oversampling) + "x  |  xruns " + juce::String (t.xruns),
+                     juce::dontSendNotification);
 
     // Log: this instance's entries plus global ones (instance id 0).
     std::vector<LogEntry> fresh;

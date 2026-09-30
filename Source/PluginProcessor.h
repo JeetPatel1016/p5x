@@ -13,6 +13,7 @@
 #include "params/ParameterIDs.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_dsp/juce_dsp.h>
 
 #include <array>
 #include <atomic>
@@ -28,8 +29,11 @@ class P5XAudioProcessor final : public juce::AudioProcessor,
 public:
     static constexpr int kMaxVoices = 10;
     static constexpr int kMonitorHistory = 200;
+    static constexpr int kOversamplingFactor = 2; // 00-architecture.md § Oversampling (HQ 4× arrives in milestone 4)
 
+    // The Standalone app gets a stereo input bus for "Route input into filter"; the VST3 is output-only.
     P5XAudioProcessor();
+    explicit P5XAudioProcessor (bool withInputBus);
     ~P5XAudioProcessor() override;
 
     //==============================================================================================
@@ -83,6 +87,11 @@ public:
     void panic() noexcept { panicRequested.store (true); }
     void startTestTone() noexcept { testToneRequested.store (true); }
 
+    // Standalone "Route input into filter" (10-debug-and-harness.md): off at launch, never saved.
+    bool hasInputBus() const noexcept { return inputBusEnabled; }
+    bool isRoutingInput() const noexcept { return routeInput.load(); }
+    void setRouteInput (bool on);
+
     // State-only settings (01-parameters.md § State-only).
     int getMidiChannel() const noexcept { return midiChannel.load(); }
     void setMidiChannel (int channel);
@@ -133,11 +142,44 @@ private:
     void timerCallback() override { serviceMessageThread(); }
 
     //==============================================================================================
+    // Parameters the engine reads, and the ones smoothed per internal sample (01-parameters.md).
+    enum Smoothed
+    {
+        sPitchOffset,
+        sPwA,
+        sPwB,
+        sFineB,
+        sMixA,
+        sMixB,
+        sMixNoise,
+        sCutoff,
+        sResonance,
+        sEnvAmount,
+        sFilterSustain,
+        sAmpSustain,
+        kNumSmoothed
+    };
+
+    struct Indices
+    {
+        int oscAFreq, oscASaw, oscAPulse, oscAPw;
+        int oscBFreq, oscBFine, oscBSaw, oscBTri, oscBPulse, oscBPw, oscBKbd;
+        int mixOscA, mixOscB, mixNoise;
+        int fltCutoff, fltRes, fltEnvAmt, fltKbd;
+        int fenvAttack, fenvDecay, fenvSustain, fenvRelease;
+        int aenvAttack, aenvDecay, aenvSustain, aenvRelease;
+        int masterTune, masterVolume, bendRange, perfVoices;
+    };
+
     void handleMidiEvent (const uint8_t* data, int size);
-    void render (juce::AudioBuffer<float>& buffer, int start, int end);
+    void readBlockParameters() noexcept;
+    void render (juce::AudioBuffer<float>& buffer, int start, int end, bool routing);
+    void pushTelemetry (int numSamples, double elapsedSeconds);
     float effectiveValue (int paramIndex) noexcept; // real units, honouring MIDI Learn overrides
+    bool effectiveBool (int paramIndex) noexcept { return effectiveValue (paramIndex) >= 0.5f; }
     void applyVoiceCountIfIdle();
     void setHeld (int note, bool held) noexcept;
+    int measureDownsamplerLatency (int maxBlock) const;
 
     void resetToDefaults();
     void readSettingsElement (const juce::XmlElement& settings, bool includeScale);
@@ -147,10 +189,11 @@ private:
     //==============================================================================================
     juce::SharedResourcePointer<p5x::debug::LogService> logService;
     const uint16_t instanceId;
+    const bool inputBusEnabled;
 
     juce::AudioProcessorValueTreeState apvts;
     std::array<juce::RangedAudioParameter*, p5x::params::kNumParameters> params {};
-    int idxMasterTune = 0, idxMasterVolume = 0, idxBendRange = 0, idxVoices = 0;
+    Indices idx {};
 
     p5x::midi::MidiLearn midiLearn;
     p5x::midi::MidiHandler midiHandler;
@@ -161,9 +204,21 @@ private:
     // Audio thread state
     std::array<p5x::dsp::Voice, kMaxVoices> voices;
     p5x::dsp::VoiceAllocator<p5x::dsp::Voice, kMaxVoices> allocator { voices };
-    p5x::dsp::LinearSmoother bendSmoother, tuneSmoother, volumeSmoother;
-    std::vector<float> scratch, pitchOffset, gain;
-    double currentSampleRate = 48000.0;
+    p5x::dsp::VoiceInputs voiceInputs;
+
+    // Internal-rate smoothers and their per-sample arrays (length = 2 × chunk capacity).
+    p5x::dsp::LinearSmoother bendSmoother, tuneSmoother, pwASmoother, pwBSmoother, fineBSmoother, mixASmoother,
+        mixBSmoother, mixNoiseSmoother, resSmoother, envAmtSmoother, fSustainSmoother, aSustainSmoother;
+    p5x::dsp::LogSmoother cutoffSmoother;
+    std::array<std::vector<float>, kNumSmoothed> smoothed;
+
+    // Host-rate output stage.
+    p5x::dsp::LinearSmoother volumeSmoother;
+    std::vector<float> hostScratch, zeros;
+    std::unique_ptr<juce::dsp::Oversampling<float>> downsampler, inputUpsampler;
+
+    double hostRate = 48000.0, internalRate = 96000.0;
+    int chunkCapacity = 0;
     float bendNormalised = 0.0f; // −1 … +1
     float modWheelValue = 0.0f, channelAftertouch = 0.0f;
     std::array<float, kMaxVoices> voicePressure {};
@@ -177,7 +232,7 @@ private:
     std::array<std::array<uint8_t, 3>, 256> injectBuffer {};
     std::array<std::atomic<uint64_t>, 2> heldNotes {};
     std::atomic<uint32_t> midiActivity { 0 };
-    std::atomic<bool> panicRequested { false }, testToneRequested { false };
+    std::atomic<bool> panicRequested { false }, testToneRequested { false }, routeInput { false };
     p5x::debug::TripleBuffer<p5x::debug::TelemetrySnapshot> telemetry;
     p5x::debug::TelemetrySnapshot lastTelemetry;
 

@@ -17,7 +17,6 @@
 | 13 | Where does the preset **name** show? The chosen look has a 3-digit 7-segment readout, which can only show the number | small light-grey text line under the display | milestone 5 |
 | 14 | The Main panel layout (control positions) only exists in the design canvas on claude.ai, which Claude Code can't open. Ask the user for a starting `art/layout.json` before milestone 5a | none in repo | milestone 5a |
 | 15 | The Audio/MIDI settings and Debug console artboards aren't in the repo either. Screenshots or a description are needed to match them | plain functional layout, palette + Kode Mono | milestone 5 |
-| 26 | Filter keyboard tracking uses which note: the glided note, and does it include bend? Rec.: glided note, no bend | unspecified | milestone 2 |
 | 28 | Poly-Mod Osc B source is labelled ±1, but B's raw summed waveform reaches ±3 with all shapes on (02 doesn't normalise). Rec.: use the raw sum and fix the label | raw sum | milestone 3 |
 | 29 | Glide for a voice's very first note (no previous note). Rec.: no glide | unspecified | milestone 4 |
 | 30 | Unison with the sustain pedal: does the note stack keep pedal-held notes? | unspecified | milestone 4 |

@@ -16,7 +16,7 @@
 - Written by the audio thread once per block into a triple buffer; read by the UI at 30 Hz.
 
 ## Debug console window
-Toggled by the Debug button (LED lit while open). Available in all builds. Matches the Debug console artboard (not in the repo yet: OPEN_QUESTIONS #15). Parts arrive by milestone: log, MIDI monitor, MIDI map (1); Voices table, CPU card (2); Scope (3); Dump state (6). Parts not built yet are hidden, not shown disabled.
+Toggled by the Debug button (LED lit while open). Available in all builds. Matches the Debug console artboard (not in the repo yet: OPEN_QUESTIONS #15). Parts arrive by milestone: log, MIDI monitor, MIDI map (1); Voices table (a tab) and CPU card (header) (2); Scope (3); Dump state (6). Parts not built yet are hidden, not shown disabled.
 - **Header buttons:** Pause (freezes views, logging continues), Clear, Save log…, Dump state, Panic.
 - **Log pane:** timestamp, level (colored: INFO blue `#8FB7E0`, WARN accent, ERROR `#E06C5A`, DEBUG dim), text. Level filter chips.
 - **MIDI monitor:** last 200 messages: time, channel, type, data. Shows all incoming messages *before* the channel filter, with channel-filtered messages and out-of-range notes (07-midi.md) dimmed.
@@ -30,7 +30,7 @@ Toggled by the Debug button (LED lit while open). Available in all builds. Match
 The Standalone app is the main testing tool. Use a custom `StandaloneFilterWindow` replacement (JUCE's `JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP`).
 - **Settings dialog** (gear icon + app menu), matching the Audio/MIDI settings artboard:
   - Audio: device type (every type JUCE offers on Windows: ASIO, Windows Audio, Windows Audio (Exclusive Mode), Windows Audio (Low Latency Mode), DirectSound), output, input, sample rate, buffer size. Built on `AudioDeviceSelectorComponent`, restyled.
-  - `Route input into filter` checkbox (Standalone only, **milestone 2**: it needs the filter and a Standalone-only input bus; the VST3 stays output-only): the selected input's first channel is added to each voice's mixer at unity, so the filter can be tested with external audio. Off by default and not saved (always off on launch, to avoid feedback surprises).
+  - `Route input into filter` checkbox (Standalone only; the Standalone has a stereo input bus, the VST3 stays output-only; the input stays muted while the checkbox is off, and on first launch no input device is selected, so no microphone opens by surprise): the selected input's first channel is added to each voice's mixer at unity, so the filter can be tested with external audio. Off by default and not saved (always off on launch, to avoid feedback surprises).
   - MIDI: active input checklist, MIDI channel, knob takeover, CC mappings count + `Save as default map` + `Clear all`, program change toggle, pitch bend range.
   - `Computer keyboard plays notes` toggle.
   - Buttons: Test tone (440 Hz sine, −12 dBFS, 2 s), Reset audio (close/reopen device), Close.

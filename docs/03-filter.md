@@ -19,11 +19,12 @@ Work in octaves relative to the cutoff knob:
 ```
 octaves = 0
         + flt_env_amt * 8 * filterEnv(0..1) * velFactor          // 05-modulation.md
-        + kbdTrack * (playedNote - 60) / 12                       // kbdTrack = 0, 0.5, 1; which note: OPEN_QUESTIONS #26
+        + kbdTrack * (playedNote - 60) / 12                       // kbdTrack = 0, 0.5, 1
         + polyModFilterOctaves + wheelModFilterOctaves + vintageCutoffOffset
 cutoffHz = clamp(flt_cutoff * 2^octaves, 5 Hz, 0.45 * internalRate)
 ```
 - Keyboard tracking pivots at MIDI note 60 (C4): at C4 tracking has no effect. (P5X.)
+- `playedNote` here is the voice's current note **after glide**; pitch bend, master tune and oscillator offsets don't move the cutoff.
 - The envelope is unipolar; the hardware has no envelope inversion. Don't add one.
 
 ## Core algorithm

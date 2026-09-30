@@ -46,16 +46,18 @@ void waitForFreshRateWindow()
 }
 } // namespace
 
-TEST_CASE ("Processor: sine per note, both channels, correct pitch", "[plugin][processor]")
+TEST_CASE ("Processor: one voice per note, both channels, correct pitch", "[plugin][processor]")
 {
     Prepared f;
+    setPurePatch (f.processor);
     process (f.processor, kBlock, { { MidiMessage::noteOn (1, 69, (juce::uint8) 100), 0 } });
 
     juce::AudioBuffer<float> out (2, 48000);
     juce::MidiBuffer none;
     f.processor.processBlock (out, none);
 
-    REQUIRE (peak (out) == Approx (0.16f).margin (0.01));
+    REQUIRE (peak (out) > 0.01f);
+    REQUIRE (peak (out) <= 0.2f);
     REQUIRE (frequency (out, kRate) == Approx (440.0).epsilon (0.002));
 
     for (int i = 0; i < out.getNumSamples(); ++i)
@@ -98,7 +100,7 @@ TEST_CASE ("Processor: Panic silences everything within one block", "[plugin][pr
 
     f.processor.panic();
     REQUIRE (peak (process (f.processor, kBlock)) == 0.0f);
-    REQUIRE (peak (f.run (0.2)) == 0.0f);
+    REQUIRE (peak (f.run (0.6)) == 0.0f);
 }
 
 TEST_CASE ("Processor: All Sound Off cuts, All Notes Off releases", "[plugin][processor]")
@@ -114,7 +116,7 @@ TEST_CASE ("Processor: All Sound Off cuts, All Notes Off releases", "[plugin][pr
     REQUIRE (peak (f.run (0.3)) > 0.0f); // held by the pedal
 
     process (f.processor, kBlock, { { MidiMessage::allNotesOff (1), 0 } });
-    REQUIRE (peak (f.run (0.2)) == 0.0f); // released after 100 ms; sustain state cleared
+    REQUIRE (peak (f.run (0.6)) == 0.0f); // 0.2 s amp release is idle by ~0.33 s; sustain state cleared
 }
 
 TEST_CASE ("Processor: sustain pedal holds notes until pedal up", "[plugin][processor]")
@@ -126,7 +128,7 @@ TEST_CASE ("Processor: sustain pedal holds notes until pedal up", "[plugin][proc
     REQUIRE (peak (f.run (0.5)) > 0.0f);
 
     process (f.processor, kBlock, { { MidiMessage::controllerEvent (1, 64, 0), 0 } });
-    REQUIRE (peak (f.run (0.2)) == 0.0f);
+    REQUIRE (peak (f.run (0.6)) == 0.0f);
 }
 
 TEST_CASE ("Processor: channel filter 3 ignores channel 1", "[plugin][processor]")
@@ -155,6 +157,7 @@ TEST_CASE ("Processor: notes outside 36-96 are ignored", "[plugin][processor]")
 TEST_CASE ("Processor: pitch bend follows bend_range", "[plugin][processor]")
 {
     Prepared f;
+    setPurePatch (f.processor);
     setParam (f.processor, "bend_range", 2.0f);
     process (f.processor, kBlock, { { MidiMessage::noteOn (1, 69, (juce::uint8) 100), 0 },
                                      { MidiMessage::pitchWheel (1, 16383), 0 } });
@@ -175,6 +178,7 @@ TEST_CASE ("Processor: pitch bend follows bend_range", "[plugin][processor]")
 TEST_CASE ("Processor: master tune and volume", "[plugin][processor]")
 {
     Prepared f;
+    setPurePatch (f.processor);
     setParam (f.processor, "master_tune", 100.0f); // +1 semitone
     process (f.processor, kBlock, { { MidiMessage::noteOn (1, 69, (juce::uint8) 100), 0 } });
     f.run (0.1);
@@ -299,7 +303,7 @@ TEST_CASE ("Processor: on-screen/computer keyboard notes play on the active chan
     f.processor.injectNoteOff (60);
     process (f.processor, kBlock);
     REQUIRE_FALSE (f.processor.isNoteHeld (60));
-    REQUIRE (peak (f.run (0.2)) == 0.0f);
+    REQUIRE (peak (f.run (0.6)) == 0.0f);
 }
 
 TEST_CASE ("Processor: MIDI monitor records messages before the channel filter", "[plugin][processor]")
@@ -336,7 +340,7 @@ TEST_CASE ("Processor: odd block sizes, including 0 and larger than prepared", "
     }
 }
 
-TEST_CASE ("Processor: chords never reach full scale; the safety clipper catches 10 voices", "[plugin][processor]")
+TEST_CASE ("Processor: chords never reach full scale; the safety clipper catches an overload", "[plugin][processor]")
 {
     waitForFreshRateWindow();
 
@@ -373,6 +377,7 @@ TEST_CASE ("Processor: chords never reach full scale; the safety clipper catches
     {
         Prepared f;
         setParam (f.processor, "perf_voices", 2.0f); // "10"
+        setParam (f.processor, "master_volume", 6.0f); // a deliberate overload for the safety clipper
         process (f.processor, kBlock);
         waitForFreshRateWindow(); // the 5-voice case above may have used this second's WARN
         logLines (f.processor, f.logPosition);
