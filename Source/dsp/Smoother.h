@@ -53,4 +53,33 @@ private:
     float current = 0.0f, target = 0.0f, step = 0.0f;
     int rampSamples = 1, remaining = 0;
 };
+
+// Ramps linearly in log2 (octaves), for frequencies ("Log N" in 01-parameters.md § Conventions).
+class LogSmoother
+{
+public:
+    void prepare (double sampleRate, double timeMs) noexcept { octaves.prepare (sampleRate, timeMs); }
+
+    void reset (float valueHz) noexcept
+    {
+        octaves.reset (toOctaves (valueHz));
+        cached = std::exp2 (octaves.getCurrent());
+    }
+
+    void setTarget (float valueHz) noexcept { octaves.setTarget (toOctaves (valueHz)); }
+
+    float next() noexcept
+    {
+        if (octaves.isSmoothing())
+            cached = std::exp2 (octaves.next());
+
+        return cached;
+    }
+
+private:
+    static float toOctaves (float hz) noexcept { return std::log2 (std::max (hz, 1.0e-3f)); }
+
+    LinearSmoother octaves;
+    float cached = 1.0f;
+};
 } // namespace p5x::dsp

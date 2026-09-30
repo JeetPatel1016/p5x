@@ -9,12 +9,16 @@ include(Catch)
 set(TEST_DATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/p5x-test-data")
 
 set(SUPPORT_SOURCES
+    support/Spectrum.h
     support/AllocationCounter.h
     support/AllocationCounter.cpp
     support/TestEnvironment.cpp)
 
 # --------------------------------------------------------------------------------------------------
 set(UNIT_TEST_SOURCES
+    dsp/EnvelopeTests.cpp
+    dsp/LadderFilterTests.cpp
+    dsp/OscillatorTests.cpp
     dsp/OutputStageTests.cpp
     dsp/RandomTests.cpp
     dsp/SmootherTests.cpp
@@ -44,8 +48,12 @@ catch_discover_tests(p5x_tests PROPERTIES ENVIRONMENT "P5X_DATA_DIR=${TEST_DATA_
 # --------------------------------------------------------------------------------------------------
 set(PLUGIN_TEST_SOURCES
     plugin/TestProcessor.h
+    plugin/AliasingTests.cpp
+    plugin/EngineTests.cpp
+    plugin/GoldenTests.cpp
     plugin/IdentityTests.cpp
     plugin/ParameterTests.cpp
+    plugin/PerformanceTests.cpp
     plugin/StateTests.cpp
     plugin/ProcessorTests.cpp
     plugin/RobustnessTests.cpp
@@ -54,7 +62,8 @@ set(PLUGIN_TEST_SOURCES
 
 add_executable(p5x_plugin_tests ${SUPPORT_SOURCES} ${PLUGIN_TEST_SOURCES})
 target_include_directories(p5x_plugin_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${juce_SOURCE_DIR}/modules")
-target_compile_definitions(p5x_plugin_tests PRIVATE P5X_TEST_NO_GUI=0 P5X_TEST_DATA_DIR="${TEST_DATA_DIR}")
+target_compile_definitions(p5x_plugin_tests PRIVATE P5X_TEST_NO_GUI=0 P5X_TEST_DATA_DIR="${TEST_DATA_DIR}"
+                                                    P5X_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(p5x_plugin_tests PRIVATE P5X Catch2::Catch2WithMain)
 
 p5x_strict_sources(${PLUGIN_TEST_SOURCES})

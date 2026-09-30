@@ -73,8 +73,17 @@ int messageSize (uint8_t status) noexcept
 
 //==================================================================================================
 P5XAudioProcessor::P5XAudioProcessor()
-    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+    : P5XAudioProcessor (juce::JUCEApplicationBase::isStandaloneApp())
+{
+}
+
+P5XAudioProcessor::P5XAudioProcessor (bool withInputBus)
+    : AudioProcessor (withInputBus ? BusesProperties()
+                                         .withInput ("Input", juce::AudioChannelSet::stereo(), true)
+                                         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                                   : BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       instanceId (debug::nextInstanceId()),
+      inputBusEnabled (withInputBus),
       apvts (*this, nullptr, "PARAMETERS", params::createParameterLayout()),
       midiLearn (makeDescriptors (apvts))
 {
@@ -85,10 +94,15 @@ P5XAudioProcessor::P5XAudioProcessor()
         params[i]->addListener (this);
     }
 
-    idxMasterTune = getParameterIndex (params::id::masterTune);
-    idxMasterVolume = getParameterIndex (params::id::masterVolume);
-    idxBendRange = getParameterIndex (params::id::bendRange);
-    idxVoices = getParameterIndex (params::id::perfVoices);
+    using namespace params::id;
+    auto at = [this] (const char* id) { return getParameterIndex (id); };
+    idx = { at (oscAFreq), at (oscASaw), at (oscAPulse), at (oscAPw),
+            at (oscBFreq), at (oscBFine), at (oscBSaw), at (oscBTri), at (oscBPulse), at (oscBPw), at (oscBKbd),
+            at (mixOscA), at (mixOscB), at (mixNoise),
+            at (fltCutoff), at (fltRes), at (fltEnvAmt), at (fltKbd),
+            at (fenvAttack), at (fenvDecay), at (fenvSustain), at (fenvRelease),
+            at (aenvAttack), at (aenvDecay), at (aenvSustain), at (aenvRelease),
+            at (masterTune), at (masterVolume), at (bendRange), at (perfVoices) };
 
     seed.store (makeSeed());
     loadGlobalDefaults();
@@ -122,39 +136,102 @@ int P5XAudioProcessor::getParameterIndex (const juce::String& paramId) const noe
 }
 
 //==================================================================================================
+namespace
+{
+std::unique_ptr<juce::dsp::Oversampling<float>> makeOversampler (int maxBlock)
+{
+    // 00-architecture.md § Oversampling: polyphase IIR, max quality, one channel (mono internally).
+    auto os = std::make_unique<juce::dsp::Oversampling<float>> (
+        1, 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
+    os->initProcessing ((size_t) maxBlock);
+    return os;
+}
+} // namespace
+
+int P5XAudioProcessor::measureDownsamplerLatency (int maxBlock) const
+{
+    // Voices generate at the high rate directly, so only the downsampling half of the oversampler is
+    // in the signal path: measure its impulse response peak rather than using the up+down figure.
+    auto probe = makeOversampler (maxBlock);
+    const int n = juce::jmin (maxBlock, 64);
+    std::vector<float> in ((size_t) n, 0.0f), out ((size_t) n, 0.0f);
+
+    const float* inPtr = in.data();
+    auto upBlock = probe->processSamplesUp (juce::dsp::AudioBlock<const float> (&inPtr, 1, (size_t) n));
+    upBlock.clear();
+    upBlock.setSample (0, 0, 1.0f);
+
+    float* outPtr = out.data();
+    juce::dsp::AudioBlock<float> outBlock (&outPtr, 1, (size_t) n);
+    probe->processSamplesDown (outBlock);
+
+    int peak = 0;
+
+    for (int i = 1; i < n; ++i)
+        if (std::abs (out[(size_t) i]) > std::abs (out[(size_t) peak]))
+            peak = i;
+
+    return peak;
+}
+
 void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    currentSampleRate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    hostRate = sampleRate > 0.0 ? sampleRate : 48000.0;
+    internalRate = hostRate * kOversamplingFactor;
 
     // Rendering runs in chunks of this size, so any host block size works (00-architecture.md).
-    const auto capacity = (size_t) juce::jmax (64, samplesPerBlock);
-    scratch.assign (capacity, 0.0f);
-    pitchOffset.assign (capacity, 0.0f);
-    gain.assign (capacity, 0.0f);
+    chunkCapacity = juce::jmax (64, samplesPerBlock);
+    hostScratch.assign ((size_t) chunkCapacity, 0.0f);
+    zeros.assign ((size_t) chunkCapacity, 0.0f);
 
-    for (auto& v : voices)
-        v.prepare (currentSampleRate);
+    for (auto& array : smoothed)
+        array.assign ((size_t) (chunkCapacity * kOversamplingFactor), 0.0f);
+
+    downsampler = makeOversampler (chunkCapacity);
+    inputUpsampler = inputBusEnabled ? makeOversampler (chunkCapacity) : nullptr;
+    setLatencySamples (measureDownsamplerLatency (chunkCapacity));
+
+    const auto voiceSeed = seed.load();
+
+    for (size_t i = 0; i < voices.size(); ++i)
+        voices[i].prepare (internalRate, voiceSeed, (int) i);
 
     allocator.reset();
     heldNotes[0].store (0);
     heldNotes[1].store (0);
 
-    const float bendRangeNow = effectiveValue (idxBendRange);
-    const float volumeDb = effectiveValue (idxMasterVolume);
+    // Smoothing times from 01-parameters.md; they run at the internal rate.
+    for (auto* s : { &pwASmoother, &pwBSmoother, &fineBSmoother, &mixASmoother, &mixBSmoother, &mixNoiseSmoother,
+                     &resSmoother, &envAmtSmoother, &fSustainSmoother, &aSustainSmoother, &tuneSmoother })
+        s->prepare (internalRate, 20.0);
 
-    bendSmoother.prepare (currentSampleRate, 5.0);
-    bendSmoother.reset (bendNormalised * bendRangeNow);
-    tuneSmoother.prepare (currentSampleRate, 20.0);
-    tuneSmoother.reset (effectiveValue (idxMasterTune));
-    volumeSmoother.prepare (currentSampleRate, 20.0);
+    bendSmoother.prepare (internalRate, 5.0); // 07-midi.md: pitch bend Lin 5 ms
+    cutoffSmoother.prepare (internalRate, 20.0);
+    volumeSmoother.prepare (hostRate, 20.0);
+
+    readBlockParameters();
+    pwASmoother.reset (effectiveValue (idx.oscAPw));
+    pwBSmoother.reset (effectiveValue (idx.oscBPw));
+    fineBSmoother.reset (effectiveValue (idx.oscBFine));
+    mixASmoother.reset (effectiveValue (idx.mixOscA));
+    mixBSmoother.reset (effectiveValue (idx.mixOscB));
+    mixNoiseSmoother.reset (effectiveValue (idx.mixNoise));
+    cutoffSmoother.reset (effectiveValue (idx.fltCutoff));
+    resSmoother.reset (effectiveValue (idx.fltRes));
+    envAmtSmoother.reset (effectiveValue (idx.fltEnvAmt));
+    fSustainSmoother.reset (effectiveValue (idx.fenvSustain));
+    aSustainSmoother.reset (effectiveValue (idx.aenvSustain));
+    tuneSmoother.reset (effectiveValue (idx.masterTune));
+    bendSmoother.reset (bendNormalised * effectiveValue (idx.bendRange));
+
+    const float volumeDb = effectiveValue (idx.masterVolume);
     volumeSmoother.reset (volumeDb <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (volumeDb));
 
-    const int voiceChoice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idxVoices)));
+    const int voiceChoice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.perfVoices)));
     allocator.setActiveVoiceCount (params::kVoiceCounts[(size_t) voiceChoice]);
 
     testToneRemaining = 0;
     cpuSmoothed = 0.0f;
-    setLatencySamples (0); // no oversampling until milestone 2
 }
 
 void P5XAudioProcessor::releaseResources()
@@ -163,25 +240,84 @@ void P5XAudioProcessor::releaseResources()
 
 bool P5XAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    // Mono internally, duplicated to stereo; stereo bus only (00-architecture.md § Oversampling).
-    return layouts.inputBuses.isEmpty() && layouts.outputBuses.size() == 1
-        && layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+    // Mono internally, duplicated to stereo; stereo output only (00-architecture.md § Oversampling).
+    if (layouts.outputBuses.size() != 1 || layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+        return false;
+
+    if (layouts.inputBuses.isEmpty())
+        return true;
+
+    // Standalone input bus: mono, stereo or disabled.
+    const auto in = layouts.getMainInputChannelSet();
+    return inputBusEnabled && layouts.inputBuses.size() == 1
+        && (in.isDisabled() || in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo());
+}
+
+void P5XAudioProcessor::setRouteInput (bool on)
+{
+    routeInput.store (on && inputBusEnabled);
+    P5X_LOG (Info, Standalone, instanceId, "Route input into filter: %s", on ? "on" : "off");
 }
 
 //==================================================================================================
+void P5XAudioProcessor::readBlockParameters() noexcept
+{
+    // 2. Read parameters once per block (with MIDI Learn overrides) and set smoother targets.
+    for (int i = 0; i < params::kNumParameters; ++i)
+        midiLearn.clearOverrideIfMatched (i, params[(size_t) i]->getValue());
+
+    pwASmoother.setTarget (effectiveValue (idx.oscAPw));
+    pwBSmoother.setTarget (effectiveValue (idx.oscBPw));
+    fineBSmoother.setTarget (effectiveValue (idx.oscBFine));
+    mixASmoother.setTarget (effectiveValue (idx.mixOscA));
+    mixBSmoother.setTarget (effectiveValue (idx.mixOscB));
+    mixNoiseSmoother.setTarget (effectiveValue (idx.mixNoise));
+    cutoffSmoother.setTarget (effectiveValue (idx.fltCutoff));
+    resSmoother.setTarget (effectiveValue (idx.fltRes));
+    envAmtSmoother.setTarget (effectiveValue (idx.fltEnvAmt));
+    fSustainSmoother.setTarget (effectiveValue (idx.fenvSustain));
+    aSustainSmoother.setTarget (effectiveValue (idx.aenvSustain));
+    tuneSmoother.setTarget (effectiveValue (idx.masterTune));
+    bendSmoother.setTarget (bendNormalised * effectiveValue (idx.bendRange));
+
+    const float volumeDb = effectiveValue (idx.masterVolume);
+    volumeSmoother.setTarget (volumeDb <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (volumeDb));
+
+    // Stepped, toggle and choice parameters and envelope times apply without smoothing.
+    auto& in = voiceInputs;
+    in.oscAFreq = (int) std::lround (effectiveValue (idx.oscAFreq));
+    in.oscBFreq = (int) std::lround (effectiveValue (idx.oscBFreq));
+    in.shapesA = { effectiveBool (idx.oscASaw), false, effectiveBool (idx.oscAPulse) };
+    in.shapesB = { effectiveBool (idx.oscBSaw), effectiveBool (idx.oscBTri), effectiveBool (idx.oscBPulse) };
+    in.oscBKeyboard = effectiveBool (idx.oscBKbd);
+    in.keyboardTrack = 0.5f * (float) juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.fltKbd)));
+    in.filterEnv = { effectiveValue (idx.fenvAttack), effectiveValue (idx.fenvDecay), 0.0f, effectiveValue (idx.fenvRelease) };
+    in.ampEnv = { effectiveValue (idx.aenvAttack), effectiveValue (idx.aenvDecay), 0.0f, effectiveValue (idx.aenvRelease) };
+}
+
 void P5XAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
     const auto startTicks = juce::Time::getHighResolutionTicks();
     const int numSamples = buffer.getNumSamples();
 
-    buffer.clear();
+    // The input (Standalone only) arrives in the same buffer; render() reads it chunk by chunk
+    // before writing the output over it.
+    const bool routing = routeInput.load (std::memory_order_relaxed) && getTotalNumInputChannels() > 0
+                      && inputUpsampler != nullptr;
+
+    if (downsampler == nullptr)
+    {
+        buffer.clear();
+        return;
+    }
+
     midiHandler.setChannel (midiChannel.load (std::memory_order_relaxed));
 
     if (panicRequested.exchange (false))
     {
         // Panic = All Sound Off + clear sustain + clear note stack (07-midi.md).
-        allocator.allSoundOff();
+        allSoundOff();
         allocator.clearSustainState();
         heldNotes[0].store (0);
         heldNotes[1].store (0);
@@ -190,18 +326,11 @@ void P5XAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     if (testToneRequested.exchange (false))
     {
-        testToneRemaining = (int) (2.0 * currentSampleRate);
+        testToneRemaining = (int) (2.0 * hostRate);
         testTonePhase = 0.0;
     }
 
-    // 2. Read parameters once per block (with MIDI Learn overrides) and set smoother targets.
-    for (int i = 0; i < params::kNumParameters; ++i)
-        midiLearn.clearOverrideIfMatched (i, params[(size_t) i]->getValue());
-
-    const float volumeDb = effectiveValue (idxMasterVolume);
-    volumeSmoother.setTarget (volumeDb <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (volumeDb));
-    tuneSmoother.setTarget (effectiveValue (idxMasterTune));
-    bendSmoother.setTarget (bendNormalised * effectiveValue (idxBendRange));
+    readBlockParameters();
     applyVoiceCountIfIdle();
 
     // 3. Events: on-screen/computer keyboard first (at sample 0), then the host's, sample-accurately.
@@ -229,21 +358,121 @@ void P5XAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
         if (position > rendered)
         {
-            render (buffer, rendered, position);
+            render (buffer, rendered, position, routing);
             rendered = position;
         }
 
         handleMidiEvent (metadata.data, metadata.numBytes);
     }
 
-    render (buffer, rendered, numSamples);
+    render (buffer, rendered, numSamples, routing);
     midiMessages.clear();
 
-    // 6. Telemetry and CPU (processBlock time / block duration, smoothed over 300 ms).
+    pushTelemetry (numSamples, juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - startTicks));
+}
+
+void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int end, bool routing)
+{
+    const int numChannels = buffer.getNumChannels();
+    int position = start;
+
+    while (position < end)
+    {
+        const int n = juce::jmin (end - position, chunkCapacity);
+        const int internalN = n * kOversamplingFactor;
+
+        // Standalone input: upsample the first input channel to the internal rate (read before
+        // the output overwrites the buffer).
+        voiceInputs.externalInput = nullptr;
+
+        if (routing)
+        {
+            const float* inputChannel = buffer.getReadPointer (0, position);
+            auto upsampled = inputUpsampler->processSamplesUp (juce::dsp::AudioBlock<const float> (&inputChannel, 1, (size_t) n));
+            voiceInputs.externalInput = upsampled.getChannelPointer (0);
+        }
+
+        // Per-internal-sample parameter values.
+        for (int i = 0; i < internalN; ++i)
+        {
+            const auto s = (size_t) i;
+            smoothed[sPitchOffset][s] = bendSmoother.next() + tuneSmoother.next() * 0.01f;
+            smoothed[sPwA][s] = pwASmoother.next();
+            smoothed[sPwB][s] = pwBSmoother.next();
+            smoothed[sFineB][s] = fineBSmoother.next();
+            smoothed[sMixA][s] = mixASmoother.next();
+            smoothed[sMixB][s] = mixBSmoother.next();
+            smoothed[sMixNoise][s] = mixNoiseSmoother.next();
+            smoothed[sCutoff][s] = cutoffSmoother.next();
+            smoothed[sResonance][s] = resSmoother.next();
+            smoothed[sEnvAmount][s] = envAmtSmoother.next();
+            smoothed[sFilterSustain][s] = fSustainSmoother.next();
+            smoothed[sAmpSustain][s] = aSustainSmoother.next();
+        }
+
+        auto& in = voiceInputs;
+        in.pitchOffset = smoothed[sPitchOffset].data();
+        in.pwA = smoothed[sPwA].data();
+        in.pwB = smoothed[sPwB].data();
+        in.fineB = smoothed[sFineB].data();
+        in.mixA = smoothed[sMixA].data();
+        in.mixB = smoothed[sMixB].data();
+        in.mixNoise = smoothed[sMixNoise].data();
+        in.cutoffHz = smoothed[sCutoff].data();
+        in.resonance = smoothed[sResonance].data();
+        in.envAmount = smoothed[sEnvAmount].data();
+        in.filterSustain = smoothed[sFilterSustain].data();
+        in.ampSustain = smoothed[sAmpSustain].data();
+
+        // Voices render straight into the oversampler's high-rate buffer; one downsampler for all.
+        const float* zeroPtr = zeros.data();
+        auto highRate = downsampler->processSamplesUp (juce::dsp::AudioBlock<const float> (&zeroPtr, 1, (size_t) n));
+        float* mixBus = highRate.getChannelPointer (0);
+        std::fill (mixBus, mixBus + internalN, 0.0f);
+
+        for (auto& v : voices)
+            v.render (mixBus, in, internalN);
+
+        float* hostPtr = hostScratch.data();
+        juce::dsp::AudioBlock<float> hostBlock (&hostPtr, 1, (size_t) n);
+        downsampler->processSamplesDown (hostBlock);
+
+        // Output stage (06-voices.md): master volume, then the safety clipper.
+        for (int i = 0; i < n; ++i)
+            hostScratch[(size_t) i] *= volumeSmoother.next();
+
+        if (dsp::SafetyClipper::processBlock (hostScratch.data(), n))
+            P5X_LOG_RATE (Warn, 1, Engine, instanceId, "Safety clipper engaged (output above -1.9 dBFS)");
+
+        if (testToneRemaining > 0)
+        {
+            const double increment = 440.0 / hostRate;
+            const int toneSamples = juce::jmin (n, testToneRemaining);
+
+            for (int i = 0; i < toneSamples; ++i)
+            {
+                hostScratch[(size_t) i] += kTestToneGain * (float) std::sin (juce::MathConstants<double>::twoPi * testTonePhase);
+                testTonePhase += increment;
+                testTonePhase -= std::floor (testTonePhase);
+            }
+
+            testToneRemaining -= toneSamples;
+        }
+
+        // Mono → every output channel.
+        for (int ch = 0; ch < numChannels; ++ch)
+            std::copy (hostScratch.begin(), hostScratch.begin() + n, buffer.getWritePointer (ch, position));
+
+        position += n;
+    }
+}
+
+void P5XAudioProcessor::pushTelemetry (int numSamples, double elapsed)
+{
+    // CPU: processBlock time / block duration, smoothed over 300 ms (10-debug-and-harness.md).
     if (numSamples > 0)
     {
-        const double elapsed = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - startTicks);
-        const double blockSeconds = numSamples / currentSampleRate;
+        const double blockSeconds = numSamples / hostRate;
         const float load = (float) (100.0 * elapsed / blockSeconds);
         const float alpha = (float) (1.0 - std::exp (-blockSeconds / 0.3));
         cpuSmoothed += alpha * (load - cpuSmoothed);
@@ -254,68 +483,36 @@ void P5XAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     debug::TelemetrySnapshot snapshot;
     snapshot.cpuPercent = cpuSmoothed;
-    snapshot.sampleRate = currentSampleRate;
+    snapshot.sampleRate = hostRate;
     snapshot.blockSize = numSamples;
-    snapshot.oversampling = 1;
+    snapshot.oversampling = kOversamplingFactor;
     snapshot.xruns = xruns;
     snapshot.voiceCount = allocator.getActiveVoiceCount();
 
-    for (const auto& v : voices)
-        snapshot.activeVoices += v.isIdle() ? 0 : 1;
+    for (int i = 0; i < kMaxVoices; ++i)
+    {
+        const auto& v = voices[(size_t) i];
+        auto& t = snapshot.voices[(size_t) i];
+
+        if (v.isIdle())
+        {
+            t.state = debug::VoiceTelemetry::State::Idle;
+            continue;
+        }
+
+        ++snapshot.activeVoices;
+        t.state = allocator.isSustained (i) ? debug::VoiceTelemetry::State::Sustained
+                : v.isReleasing()            ? debug::VoiceTelemetry::State::Release
+                                             : debug::VoiceTelemetry::State::On;
+        t.ampStage = (uint8_t) v.getAmpStage();
+        t.note = (int8_t) v.getNote();
+        t.velocity = v.getVelocity();
+        t.oscAHz = v.getOscAHz();
+        t.cutoffHz = v.getCutoffHz();
+        t.ampLevel = v.getAmpLevel();
+    }
 
     telemetry.write (snapshot);
-}
-
-void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int end)
-{
-    if (scratch.empty())
-        return;
-
-    const int numChannels = buffer.getNumChannels();
-    int position = start;
-
-    while (position < end)
-    {
-        const int n = juce::jmin (end - position, (int) scratch.size());
-
-        for (int i = 0; i < n; ++i)
-        {
-            pitchOffset[(size_t) i] = bendSmoother.next() + tuneSmoother.next() * 0.01f;
-            gain[(size_t) i] = volumeSmoother.next();
-        }
-
-        std::fill (scratch.begin(), scratch.begin() + n, 0.0f);
-
-        for (auto& v : voices)
-            v.render (scratch.data(), pitchOffset.data(), n);
-
-        for (int i = 0; i < n; ++i)
-            scratch[(size_t) i] *= gain[(size_t) i];
-
-        // Output stage (06-voices.md): master volume, then the safety clipper.
-        if (dsp::SafetyClipper::processBlock (scratch.data(), n))
-            P5X_LOG_RATE (Warn, 1, Engine, instanceId, "Safety clipper engaged (output above -1.9 dBFS)");
-
-        if (testToneRemaining > 0)
-        {
-            const double increment = 440.0 / currentSampleRate;
-            const int toneSamples = juce::jmin (n, testToneRemaining);
-
-            for (int i = 0; i < toneSamples; ++i)
-            {
-                scratch[(size_t) i] += kTestToneGain * (float) std::sin (juce::MathConstants<double>::twoPi * testTonePhase);
-                testTonePhase += increment;
-                testTonePhase -= std::floor (testTonePhase);
-            }
-
-            testToneRemaining -= toneSamples;
-        }
-
-        for (int ch = 0; ch < numChannels; ++ch)
-            std::copy (scratch.begin(), scratch.begin() + n, buffer.getWritePointer (ch, position));
-
-        position += n;
-    }
 }
 
 void P5XAudioProcessor::handleMidiEvent (const uint8_t* data, int size)
@@ -352,7 +549,7 @@ float P5XAudioProcessor::effectiveValue (int paramIndex) noexcept
 
 void P5XAudioProcessor::applyVoiceCountIfIdle()
 {
-    const int choice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idxVoices)));
+    const int choice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.perfVoices)));
     const int wanted = params::kVoiceCounts[(size_t) choice];
 
     // 06-voices.md § Voice count: a new count applies when all voices are idle.
@@ -412,6 +609,10 @@ void P5XAudioProcessor::sustainPedal (bool down)
 void P5XAudioProcessor::allSoundOff()
 {
     allocator.allSoundOff();
+
+    // Hard cut (07-midi.md): also clear the downsampler so its filter tail doesn't ring on.
+    if (downsampler != nullptr)
+        downsampler->reset();
 }
 
 void P5XAudioProcessor::allNotesOff()
@@ -435,7 +636,7 @@ void P5XAudioProcessor::pitchBend (int value14)
 {
     // 14-bit, centred at 8192, scaled to ± bend_range semitones (07-midi.md).
     bendNormalised = value14 >= 8192 ? (float) (value14 - 8192) / 8191.0f : (float) (value14 - 8192) / 8192.0f;
-    bendSmoother.setTarget (bendNormalised * effectiveValue (idxBendRange));
+    bendSmoother.setTarget (bendNormalised * effectiveValue (idx.bendRange));
 }
 
 void P5XAudioProcessor::modWheel (int value)

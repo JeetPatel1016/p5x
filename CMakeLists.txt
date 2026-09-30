@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(P5X VERSION 0.1.1 LANGUAGES C CXX)
+project(P5X VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,12 @@ set(SRC "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 # --------------------------------------------------------------------------------------------------
 # p5x_dsp: standard library only (docs/00-architecture.md § Dependency rules)
 add_library(p5x_dsp STATIC
+    ${SRC}/dsp/Envelope.h
+    ${SRC}/dsp/Envelope.cpp
+    ${SRC}/dsp/LadderFilterCEM.h
+    ${SRC}/dsp/LadderFilterCEM.cpp
+    ${SRC}/dsp/Oscillator.h
+    ${SRC}/dsp/Oscillator.cpp
     ${SRC}/dsp/OutputStage.h
     ${SRC}/dsp/Random.h
     ${SRC}/dsp/Smoother.h
@@ -99,6 +105,18 @@ juce_add_plugin(P5X
     FORMATS VST3 Standalone
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
+# JUCE only generates the Windows resource file (file properties: version, company, copyright) once;
+# its build rule doesn't depend on the version. Delete a stale one so the build regenerates it.
+set(P5X_RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/P5X_artefacts/JuceLibraryCode/P5X_resources.rc")
+if(EXISTS "${P5X_RC_FILE}")
+    file(READ "${P5X_RC_FILE}" P5X_RC_CONTENT)
+    string(REGEX MATCH "\"FileVersion\", *\"${PROJECT_VERSION}[^0-9]" P5X_RC_HAS_VERSION "${P5X_RC_CONTENT}")
+    if(NOT P5X_RC_HAS_VERSION)
+        message(STATUS "P5X: version changed to ${PROJECT_VERSION}; regenerating P5X_resources.rc")
+        file(REMOVE "${P5X_RC_FILE}")
+    endif()
+endif()
+
 set(P5X_PLUGIN_SOURCES
     ${SRC}/AppPaths.h
     ${SRC}/AppPaths.cpp
@@ -149,6 +167,7 @@ target_link_libraries(P5X
         p5x_midi
         p5x_debug_core
         juce::juce_audio_utils
+        juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags)

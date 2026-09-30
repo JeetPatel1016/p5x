@@ -43,10 +43,31 @@ private:
     uint8_t front = 2; // consumer-owned index
 };
 
-// Milestone 1 telemetry (10-debug-and-harness.md § Telemetry). Per-voice data and the scope arrive
-// with the Voices table (milestone 2) and the scope (milestone 3).
+// Per-voice telemetry for the Voices table (10-debug-and-harness.md § Telemetry).
+struct VoiceTelemetry
+{
+    enum class State : uint8_t
+    {
+        Idle,
+        On,
+        Release,
+        Sustained
+    };
+
+    State state = State::Idle;
+    uint8_t ampStage = 0; // dsp::Envelope::Stage as an integer
+    int8_t note = -1;
+    float velocity = 0.0f;
+    float oscAHz = 0.0f;
+    float cutoffHz = 0.0f;
+    float ampLevel = 0.0f;
+};
+
+// 10-debug-and-harness.md § Telemetry. The scope's samples arrive with milestone 3.
 struct TelemetrySnapshot
 {
+    static constexpr int kMaxVoices = 10;
+
     float cpuPercent = 0.0f;
     double sampleRate = 0.0;
     int blockSize = 0;
@@ -54,5 +75,6 @@ struct TelemetrySnapshot
     uint32_t xruns = 0;
     int activeVoices = 0;
     int voiceCount = 5;
+    std::array<VoiceTelemetry, kMaxVoices> voices {};
 };
 } // namespace p5x::debug
