@@ -3,7 +3,7 @@
 ## Tooling
 - **Catch2 v3** (BSL-1.0) for unit tests, fetched via CMake `FetchContent`. Test target `p5x_tests` links `p5x_dsp`, `p5x_midi` and `p5x_debug_core` only (no plugin wrapper), plus a separate `p5x_plugin_tests` that instantiates the processor headlessly (it links the plugin's shared-code library, so it tests the exact plugin code). Tests set `P5X_DATA_DIR` so global files go to a scratch folder, never the user's `%APPDATA%/P5X`.
 - **pluginval** v1.0.4 (GPL, used as an external tool only, never linked). Locally it's at `..\tools\pluginval\pluginval.exe` (outside the repo); CI downloads its own copy. Both run `pluginval --strictness-level 5 --validate-in-process --skip-gui-tests P5X.vst3`.
-- **CI:** (no GitHub remote yet; run everything locally until the user creates one) GitHub Actions, `windows-latest`, Release and Debug builds, runs both test targets and pluginval. Artifacts: VST3 + Standalone zip.
+- **CI:** GitHub Actions on https://github.com/JeetPatel1016/p5x, `windows-2022` (the image with Visual Studio 2022; `windows-latest` has only VS 2026), Release and Debug builds, runs both test targets and pluginval. Artifacts: VST3 + Standalone zip.
 
 ## Test types
 1. **Unit tests** per module: listed at the end of each doc (02–10 and 13). Every item there must exist as a test.

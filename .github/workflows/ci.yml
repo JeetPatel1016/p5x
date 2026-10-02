@@ -1,6 +1,6 @@
 # P5X — Copyright (c) 2026 Jeet Patel. Licensed under GPL-3.0-or-later.
 #
-# docs/11-testing.md § Tooling: Release and Debug builds on windows-latest, both test targets,
+# docs/11-testing.md § Tooling: Release and Debug builds on windows-2022 (VS 2022), both test targets,
 # pluginval at strictness 5, VST3 + Standalone artifacts.
 
 name: CI
@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022 # windows-latest has only VS 2026; the preset uses the VS 2022 generator
     strategy:
       fail-fast: false
       matrix:
