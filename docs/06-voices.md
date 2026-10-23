@@ -1,7 +1,7 @@
 # 06 · Voices, allocation, unison, glide, Vintage, output stage
 
 ## Voice structure
-Each voice owns: Osc A, Osc B, noise generator, LadderFilterCEM, filter Envelope, amp Envelope, DC blocker, per-voice `Random`, Vintage offsets, glide state, current note, velocity, gate flag, age counter.
+Each voice owns: Osc A, Osc B, noise generator, LadderFilterCEM, filter Envelope, amp Envelope, per-voice `Random`, Vintage offsets, glide state, current note, velocity, gate flag, age counter.
 
 Per internal sample:
 1. Glide → current note.
@@ -11,7 +11,7 @@ Per internal sample:
 5. Mixer: `a * mix_osc_a + b * mix_osc_b + noise * mix_noise * 0.7`.
 6. Filter (cutoff per 03-filter.md).
 7. VCA: `× ampEnv × velocityGain`.
-8. DC blocker: one-pole high-pass at 5 Hz.
+8. (The DC blocker runs once on the summed output, not per voice: see § Output stage.)
 9. Add to the shared oversampled buffer × **voice gain 0.16** (P5X headroom: 5 full-level voices sum to at most 0.8, so with the default voice count the safety clipper never engages; with 8 or 10 voices dense chords can reach its knee).
 
 ## Voice count
@@ -33,7 +33,8 @@ In order:
 
 ## Unison (`perf_unison`)
 - All active voices play one note: **last-note priority**. Releasing the current note returns to the most recent still-held note (note stack of 16, drop oldest when full).
-- Each new note retriggers envelopes on all voices (from current level). Interaction with the sustain pedal is open (OPEN_QUESTIONS #30).
+- Each new note retriggers envelopes on all voices (from current level).
+- **Sustain pedal in unison:** with the pedal down, a released key stays in the note stack (the current note keeps sounding). On pedal up, notes whose keys are up leave the stack; pitch returns to the most recent key still held, or all voices release if none is.
 - Detune spread: voice `i` of `N` gets `(i/(N-1) - 0.5) × 14 cents` (±7 cents total spread), plus its Vintage offsets.
 - Output gain in unison: voice gain × `1 / sqrt(N)` × 1.5 so unison is louder than one voice but doesn't clip hard. (P5X.)
 - Switching unison on/off: all voices get `gateOff()` first, then the new mode takes effect.
@@ -42,8 +43,8 @@ In order:
 - Constant-time glide: each voice moves from its previous note to the new note in `perf_glide` seconds, linearly in semitones.
 - In poly mode each voice glides from **its own** last note. In unison all voices glide together from the previous unison note.
 - `perf_glide = 0` → instant (no computation).
-- A voice's very first note (no previous note): open, OPEN_QUESTIONS #29.
-- First note after a voice was idle glides from that voice's last note (hardware behaviour). (Verify; see OPEN_QUESTIONS.)
+- A voice's very first note (no previous note since `prepare`) doesn't glide.
+- First note after a voice was idle glides from that voice's last note (hardware behaviour).
 
 ## Vintage (`perf_vintage`, 0–1)
 Per voice, drawn once from the seeded `Random` at `prepare` and scaled by the knob. Every `prepare` re-seeds each per-voice `Random` from the instance `seed` and the voice index, so repeated `prepare` calls and reloads give the same values:
@@ -52,13 +53,14 @@ Per voice, drawn once from the seeded `Random` at `prepare` and scaled by the kn
 | Static detune Osc A, Osc B (independent) | uniform ±8 cents |
 | Static cutoff offset | uniform ±0.2 octaves |
 | Static envelope time scale | uniform ×0.9–1.1 (all four times, both envelopes) |
-| Slow drift, Osc A and B (independent) | random walk, ±4 cents max, low-passed at 0.3 Hz, updated at host rate |
+| Slow drift, Osc A and B (independent) | bounded random walk (reflects at ±4 cents; steps sized so it typically crosses the range in about 10 s), low-passed at 0.3 Hz, updated at host rate |
 At Vintage = 0 every offset is exactly 0 and output is identical to a "perfect" instrument.
 
 ## Output stage (after downsampling, host rate)
-1. `× master_volume` (dB → gain, −60 dB = 0).
-2. **Safety clipper:** identity for |x| ≤ 0.8; above that `y = sign(x) · (0.8 + 0.2 · tanh((|x| − 0.8) / 0.2))`, continuous in value and slope, never beyond ±1.0 (P5X; keeps a runaway patch or a dense chord at full master volume from hard-clipping at the host or sound card). Log WARN when engaged (rate-limited 1/s). In place since 0.1.1 (`dsp/OutputStage.h`).
-3. Mono → both output channels.
+1. **DC blocker:** one-pole high-pass at 5 Hz on the summed signal (one for the whole mix; per-voice blockers were cut off mid-tail when a voice went idle, which clicked: see DECISIONS.md 2026-10-23).
+2. `× master_volume` (dB → gain, −60 dB = 0).
+3. **Safety clipper:** identity for |x| ≤ 0.8; above that `y = sign(x) · (0.8 + 0.2 · tanh((|x| − 0.8) / 0.2))`, continuous in value and slope, never beyond ±1.0 (P5X; keeps a runaway patch or a dense chord at full master volume from hard-clipping at the host or sound card). Log WARN when engaged (rate-limited 1/s). In place since 0.1.1 (`dsp/OutputStage.h`).
+4. Mono → both output channels.
 
 ## Oversampling modes
 - 2× default, 4× when `hq_mode` is on. Internal rate = host rate × factor.

@@ -46,7 +46,7 @@ struct VoiceInputs
 };
 
 // One voice (06-voices.md § Voice structure): oscillators with sync and Lo Freq, noise, mixer,
-// Poly-Mod, Wheel-Mod destinations, CEM3320 filter, both envelopes, VCA, DC blocker. Velocity,
+// Poly-Mod, Wheel-Mod destinations, CEM3320 filter, both envelopes, VCA. Velocity,
 // aftertouch, glide, Vintage and unison arrive in milestone 4.
 class Voice
 {
@@ -54,7 +54,6 @@ public:
     static constexpr float kVoiceGain = 0.16f;  // 06-voices.md § Voice structure, step 9
     static constexpr float kNoiseLevel = 0.7f;  // 02-oscillators.md § Noise
     static constexpr float kFilterDrive = 0.5f; // 03-filter.md § Core algorithm
-    static constexpr double kDcBlockerHz = 5.0; // 06-voices.md, step 8
     static constexpr double kLoFreqDivisor = 128.0; // 02-oscillators.md § Pitch
 
     // Modulation depths at full source (05-modulation.md).
@@ -98,7 +97,6 @@ private:
     LadderFilterCEM filter;
     Envelope filterEnvelope, ampEnvelope;
 
-    double dcCoeff = 0.0, dcIn = 0.0, dcOut = 0.0;
     int note = 60;
     float velocity = 1.0f;
     float lastOscAHz = 0.0f, lastOscBHz = 0.0f, lastCutoffHz = 0.0f;

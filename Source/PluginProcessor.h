@@ -225,6 +225,7 @@ private:
 
     // Host-rate output stage.
     p5x::dsp::LinearSmoother volumeSmoother;
+    p5x::dsp::DcBlocker dcBlocker;
     std::vector<float> hostScratch, zeros;
     std::unique_ptr<juce::dsp::Oversampling<float>> downsampler, inputUpsampler;
 

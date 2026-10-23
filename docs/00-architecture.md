@@ -46,13 +46,13 @@ Cross-thread channels (all lock-free, fixed size, allocated in the constructor):
           ┌──────────── Poly-Mod (Filt Env, Osc B) ─────────────┐
           │                                                     ▼
  note ─► pitch ─► OSC A (saw+pulse, sync to B) ─┐        freq A / PW A / cutoff
-          │      OSC B (saw+tri+pulse) ─────────┤─► Mixer ─► CEM3320 LPF ─► VCA ─► DC block ─► voice out
+          │      OSC B (saw+tri+pulse) ─────────┤─► Mixer ─► CEM3320 LPF ─► VCA ─► voice out
           │      Noise (white) ─────────────────┘            ▲                ▲
           └── Wheel-Mod (LFO/noise × wheel) ──► freq A/B, PW A/B, cutoff      │
                                      Filter Env ──► cutoff    Amp Env ────────┘
 ```
 Global (shared by all voices): LFO, wheel-mod noise source, master tune, pitch bend, mod wheel, aftertouch.
-Output: sum of voices (at oversampled rate) → downsampler → master volume → safety clipper → out. See 06-voices.md.
+Output: sum of voices (at oversampled rate) → downsampler → DC blocker → master volume → safety clipper → out. See 06-voices.md.
 
 ## Oversampling
 - All voice DSP runs at **2× the host rate** (4× in HQ mode). Voices render into one shared oversampled mono buffer, which is downsampled **once** after summing (not per voice).

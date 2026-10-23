@@ -213,6 +213,7 @@ void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     bendSmoother.prepare (internalRate, 5.0); // 07-midi.md: pitch bend Lin 5 ms
     cutoffSmoother.prepare (internalRate, 20.0);
     volumeSmoother.prepare (hostRate, 20.0);
+    dcBlocker.prepare (hostRate);
     wheelModSource.prepare (hostRate, kOversamplingFactor, voiceSeed);
 
     readBlockParameters();
@@ -476,7 +477,9 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
         juce::dsp::AudioBlock<float> hostBlock (&hostPtr, 1, (size_t) n);
         downsampler->processSamplesDown (hostBlock);
 
-        // Output stage (06-voices.md): master volume, then the safety clipper.
+        // Output stage (06-voices.md): DC blocker on the sum, master volume, then the safety clipper.
+        dcBlocker.processBlock (hostScratch.data(), n);
+
         for (int i = 0; i < n; ++i)
             hostScratch[(size_t) i] *= volumeSmoother.next();
 
@@ -658,9 +661,11 @@ void P5XAudioProcessor::allSoundOff()
 {
     allocator.allSoundOff();
 
-    // Hard cut (07-midi.md): also clear the downsampler so its filter tail doesn't ring on.
+    // Hard cut (07-midi.md): also clear the downsampler and DC blocker so their tails don't ring on.
     if (downsampler != nullptr)
         downsampler->reset();
+
+    dcBlocker.reset();
 }
 
 void P5XAudioProcessor::allNotesOff()

@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <numbers>
 
 namespace p5x::dsp
 {
@@ -28,7 +27,6 @@ void Voice::prepare (double internalRate, uint64_t seed, int voiceIndex) noexcep
     filterEnvelope.prepare (rate);
     ampEnvelope.prepare (rate);
 
-    dcCoeff = std::exp (-2.0 * std::numbers::pi * kDcBlockerHz / rate);
     reset();
 }
 
@@ -37,7 +35,6 @@ void Voice::reset() noexcept
     filterEnvelope.reset();
     ampEnvelope.reset();
     filter.reset();
-    dcIn = dcOut = 0.0;
     lastOscAHz = lastOscBHz = lastCutoffHz = 0.0f;
 }
 
@@ -146,12 +143,8 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
         ampParams.sustain = in.ampSustain[i];
         const float amplified = filtered * ampEnvelope.process (ampParams);
 
-        // 8. DC blocker: one-pole high-pass at 5 Hz.
-        dcOut = amplified - dcIn + dcCoeff * dcOut;
-        dcIn = amplified;
-
-        // 9. Into the shared oversampled buffer.
-        out[i] += (float) dcOut * kVoiceGain;
+        // 8. Into the shared oversampled buffer (the DC blocker runs once on the sum: 06 § Output stage).
+        out[i] += amplified * kVoiceGain;
 
         if (i == numSamples - 1 || ampEnvelope.isIdle())
         {
