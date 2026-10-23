@@ -106,7 +106,8 @@ P5XAudioProcessor::P5XAudioProcessor (bool withInputBus)
             at (pmFiltEnv), at (pmOscB), at (pmDestFreqA), at (pmDestPwA), at (pmDestFilter),
             at (lfoRate), at (lfoShape),
             at (wmMix), at (wmDestFreqA), at (wmDestFreqB), at (wmDestPwA), at (wmDestPwB), at (wmDestFilter),
-            at (masterTune), at (masterVolume), at (bendRange), at (perfVoices) };
+            at (masterTune), at (masterVolume), at (bendRange), at (perfVoices),
+            at (perfGlide), at (perfVintage), at (perfUnison), at (perfVelocity), at (perfAftertouch) };
 
     seed.store (makeSeed());
     loadGlobalDefaults();
@@ -142,11 +143,11 @@ int P5XAudioProcessor::getParameterIndex (const juce::String& paramId) const noe
 //==================================================================================================
 namespace
 {
-std::unique_ptr<juce::dsp::Oversampling<float>> makeOversampler (int maxBlock)
+std::unique_ptr<juce::dsp::Oversampling<float>> makeOversampler (int factor, int maxBlock)
 {
     // 00-architecture.md § Oversampling: polyphase IIR, max quality, one channel (mono internally).
     auto os = std::make_unique<juce::dsp::Oversampling<float>> (
-        1, 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
+        1, factor == 4 ? 2 : 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false); // 2^stages
     os->initProcessing ((size_t) maxBlock);
     return os;
 }
@@ -156,7 +157,7 @@ int P5XAudioProcessor::measureDownsamplerLatency (int maxBlock) const
 {
     // Voices generate at the high rate directly, so only the downsampling half of the oversampler is
     // in the signal path: measure its impulse response peak rather than using the up+down figure.
-    auto probe = makeOversampler (maxBlock);
+    auto probe = makeOversampler (oversampling, maxBlock);
     const int n = juce::jmin (maxBlock, 64);
     std::vector<float> in ((size_t) n, 0.0f), out ((size_t) n, 0.0f);
 
@@ -181,7 +182,8 @@ int P5XAudioProcessor::measureDownsamplerLatency (int maxBlock) const
 void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     hostRate = sampleRate > 0.0 ? sampleRate : 48000.0;
-    internalRate = hostRate * kOversamplingFactor;
+    oversampling = hqMode.load() ? kOversamplingHq : kOversamplingNormal; // 06-voices.md § Oversampling modes
+    internalRate = hostRate * oversampling;
 
     // Rendering runs in chunks of this size, so any host block size works (00-architecture.md).
     chunkCapacity = juce::jmax (64, samplesPerBlock);
@@ -189,16 +191,16 @@ void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     zeros.assign ((size_t) chunkCapacity, 0.0f);
 
     for (auto& array : smoothed)
-        array.assign ((size_t) (chunkCapacity * kOversamplingFactor), 0.0f);
+        array.assign ((size_t) (chunkCapacity * oversampling), 0.0f);
 
-    downsampler = makeOversampler (chunkCapacity);
-    inputUpsampler = inputBusEnabled ? makeOversampler (chunkCapacity) : nullptr;
+    downsampler = makeOversampler (oversampling, chunkCapacity);
+    inputUpsampler = inputBusEnabled ? makeOversampler (oversampling, chunkCapacity) : nullptr;
     setLatencySamples (measureDownsamplerLatency (chunkCapacity));
 
     const auto voiceSeed = seed.load();
 
     for (size_t i = 0; i < voices.size(); ++i)
-        voices[i].prepare (internalRate, voiceSeed, (int) i);
+        voices[i].prepare (internalRate, voiceSeed, (int) i, oversampling);
 
     allocator.reset();
     heldNotes[0].store (0);
@@ -207,20 +209,23 @@ void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // Smoothing times from 01-parameters.md; they run at the internal rate.
     for (auto* s : { &pwASmoother, &pwBSmoother, &fineBSmoother, &mixASmoother, &mixBSmoother, &mixNoiseSmoother,
                      &resSmoother, &envAmtSmoother, &fSustainSmoother, &aSustainSmoother, &tuneSmoother,
-                     &pmFilterEnvSmoother, &pmOscBSmoother, &wheelSmoother })
-        s->prepare (internalRate, 20.0); // mod wheel: Lin 20 (05-modulation.md § Wheel-Mod)
+                     &pmFilterEnvSmoother, &pmOscBSmoother, &wheelSmoother, &channelPressureSmoother,
+                     &vintageSmoother })
+        s->prepare (internalRate, 20.0); // mod wheel and aftertouch: Lin 20 (05-modulation.md)
 
     bendSmoother.prepare (internalRate, 5.0); // 07-midi.md: pitch bend Lin 5 ms
     cutoffSmoother.prepare (internalRate, 20.0);
     volumeSmoother.prepare (hostRate, 20.0);
     dcBlocker.prepare (hostRate);
-    wheelModSource.prepare (hostRate, kOversamplingFactor, voiceSeed);
+    wheelModSource.prepare (hostRate, oversampling, voiceSeed);
 
     readBlockParameters();
     wheelModSource.resetSmoothing (effectiveValue (idx.lfoRate), effectiveValue (idx.wmMix));
     pmFilterEnvSmoother.reset (effectiveValue (idx.pmFiltEnv));
     pmOscBSmoother.reset (effectiveValue (idx.pmOscB));
     wheelSmoother.reset (modWheelValue);
+    channelPressureSmoother.reset (channelPressureSmoother.getTarget());
+    vintageSmoother.reset (effectiveValue (idx.perfVintage));
     pwASmoother.reset (effectiveValue (idx.oscAPw));
     pwBSmoother.reset (effectiveValue (idx.oscBPw));
     fineBSmoother.reset (effectiveValue (idx.oscBFine));
@@ -240,6 +245,13 @@ void P5XAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     const int voiceChoice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.perfVoices)));
     allocator.setActiveVoiceCount (params::kVoiceCounts[(size_t) voiceChoice]);
+
+    // Unison: start clean in the current mode (06-voices.md § Unison).
+    pedalDown = false;
+    unisonStack.clear();
+    unisonNote = -1;
+    unisonActive = effectiveBool (idx.perfUnison);
+    applyUnisonVoices();
 
     testToneRemaining = 0;
     cpuSmoothed = 0.0f;
@@ -294,6 +306,12 @@ void P5XAudioProcessor::readBlockParameters() noexcept
     bendSmoother.setTarget (bendNormalised * effectiveValue (idx.bendRange));
     pmFilterEnvSmoother.setTarget (effectiveValue (idx.pmFiltEnv));
     pmOscBSmoother.setTarget (effectiveValue (idx.pmOscB));
+    vintageSmoother.setTarget (effectiveValue (idx.perfVintage));
+    glideSeconds = effectiveValue (idx.perfGlide);
+
+    // Unison on/off: every voice is released first, then the new mode applies (06 § Unison).
+    if (const bool wantUnison = effectiveBool (idx.perfUnison); wantUnison != unisonActive)
+        setUnisonMode (wantUnison);
 
     const int shapeChoice = juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.lfoShape)));
     wheelModSource.setParameters (effectiveValue (idx.lfoRate), (dsp::Lfo::Shape) shapeChoice, effectiveValue (idx.wmMix));
@@ -318,6 +336,8 @@ void P5XAudioProcessor::readBlockParameters() noexcept
     in.wmPwA = effectiveBool (idx.wmDestPwA);
     in.wmPwB = effectiveBool (idx.wmDestPwB);
     in.wmFilter = effectiveBool (idx.wmDestFilter);
+    in.velocityOn = effectiveBool (idx.perfVelocity);
+    in.aftertouchOn = effectiveBool (idx.perfAftertouch);
     in.keyboardTrack = 0.5f * (float) juce::jlimit (0, 2, (int) std::lround (effectiveValue (idx.fltKbd)));
     in.filterEnv = { effectiveValue (idx.fenvAttack), effectiveValue (idx.fenvDecay), 0.0f, effectiveValue (idx.fenvRelease) };
     in.ampEnv = { effectiveValue (idx.aenvAttack), effectiveValue (idx.aenvDecay), 0.0f, effectiveValue (idx.aenvRelease) };
@@ -347,6 +367,7 @@ void P5XAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         // Panic = All Sound Off + clear sustain + clear note stack (07-midi.md).
         allSoundOff();
         allocator.clearSustainState();
+        pedalDown = false;
         heldNotes[0].store (0);
         heldNotes[1].store (0);
         P5X_LOG (Info, Engine, instanceId, "Panic");
@@ -407,7 +428,7 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
     while (position < end)
     {
         const int n = juce::jmin (end - position, chunkCapacity);
-        const int internalN = n * kOversamplingFactor;
+        const int internalN = n * oversampling;
 
         // Standalone input: upsample the first input channel to the internal rate (read before
         // the output overwrites the buffer).
@@ -430,6 +451,8 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
             smoothed[sPmFilterEnv][s] = pmFilterEnvSmoother.next();
             smoothed[sPmOscB][s] = pmOscBSmoother.next();
             smoothed[sWheelAmount][s] = wheelSmoother.next();
+            smoothed[sChannelPressure][s] = channelPressureSmoother.next();
+            smoothed[sVintage][s] = vintageSmoother.next();
             smoothed[sPwA][s] = pwASmoother.next();
             smoothed[sPwB][s] = pwBSmoother.next();
             smoothed[sFineB][s] = fineBSmoother.next();
@@ -452,6 +475,8 @@ void P5XAudioProcessor::render (juce::AudioBuffer<float>& buffer, int start, int
         in.pmOscB = smoothed[sPmOscB].data();
         in.wheelModAmount = smoothed[sWheelAmount].data();
         in.wheelModSource = smoothed[sWheelSource].data();
+        in.channelPressure = smoothed[sChannelPressure].data();
+        in.vintage = smoothed[sVintage].data();
         in.pwA = smoothed[sPwA].data();
         in.pwB = smoothed[sPwB].data();
         in.fineB = smoothed[sFineB].data();
@@ -533,7 +558,7 @@ void P5XAudioProcessor::pushTelemetry (int numSamples, double elapsed)
     snapshot.cpuPercent = cpuSmoothed;
     snapshot.sampleRate = hostRate;
     snapshot.blockSize = numSamples;
-    snapshot.oversampling = kOversamplingFactor;
+    snapshot.oversampling = oversampling;
     snapshot.xruns = xruns;
     snapshot.voiceCount = allocator.getActiveVoiceCount();
 
@@ -607,7 +632,56 @@ void P5XAudioProcessor::applyVoiceCountIfIdle()
     if (wanted != allocator.getActiveVoiceCount() && allocator.allVoicesIdle())
     {
         allocator.setActiveVoiceCount (wanted);
+        applyUnisonVoices(); // the detune spread depends on the voice count
         P5X_LOG (Info, Engine, instanceId, "Voice count set to %d", wanted);
+    }
+}
+
+void P5XAudioProcessor::setUnisonMode (bool on)
+{
+    // Switching unison on/off: every voice gets gateOff first (06-voices.md § Unison). The pedal
+    // state survives the switch.
+    allocator.allNotesOff();
+    allocator.setSustainPedal (pedalDown);
+    unisonStack.clear();
+    unisonNote = -1;
+    unisonActive = on;
+    applyUnisonVoices();
+    P5X_LOG (Info, Engine, instanceId, "Unison %s", on ? "on" : "off");
+}
+
+void P5XAudioProcessor::applyUnisonVoices() noexcept
+{
+    // Voice i of N: (i / (N − 1) − 0.5) × 14 cents; gain × 1.5 / √N (06-voices.md § Unison).
+    const int n = allocator.getActiveVoiceCount();
+
+    for (int i = 0; i < kMaxVoices; ++i)
+    {
+        if (unisonActive && i < n && n > 1)
+            voices[(size_t) i].setUnison (((double) i / (double) (n - 1) - 0.5) * 14.0, 1.5f / std::sqrt ((float) n));
+        else
+            voices[(size_t) i].setUnison (0.0, 1.0f);
+    }
+}
+
+void P5XAudioProcessor::unisonFallBack()
+{
+    // After a key (or the pedal) let go of the current note: return to the most recent note still
+    // in the stack without retriggering, or release every voice when there's none.
+    const int n = allocator.getActiveVoiceCount();
+    const int top = unisonStack.top();
+
+    if (top < 0)
+    {
+        for (int i = 0; i < n; ++i)
+            voices[(size_t) i].release();
+    }
+    else if (top != unisonNote)
+    {
+        for (int i = 0; i < n; ++i)
+            voices[(size_t) i].glideTo (top, glideSeconds);
+
+        unisonNote = top;
     }
 }
 
@@ -637,9 +711,26 @@ bool P5XAudioProcessor::isNoteHeld (int note) const noexcept
 // MidiSink (audio thread)
 void P5XAudioProcessor::noteOn (int note, int velocity)
 {
-    const auto result = allocator.noteOn (note, (float) velocity / 127.0f);
-    voicePressure[(size_t) result.voice] = 0.0f;
+    const float velocity01 = (float) velocity / 127.0f;
     setHeld (note, true);
+
+    if (unisonActive)
+    {
+        // Every active voice plays the new note, retriggered, gliding together from the previous
+        // unison note (none after switching modes).
+        const double from = unisonNote >= 0 ? (double) unisonNote : -1.0;
+        const double glide = unisonNote >= 0 ? glideSeconds : 0.0;
+        unisonStack.push (note);
+
+        for (int i = 0; i < allocator.getActiveVoiceCount(); ++i)
+            voices[(size_t) i].start (note, velocity01, glide, from);
+
+        unisonNote = note;
+        unisonVelocity = velocity01;
+        return;
+    }
+
+    const auto result = allocator.noteOn (note, velocity01, glideSeconds);
 
     if (result.stolen)
         P5X_LOG_RATE (Warn, 10, Engine, instanceId, "Voice %d stolen: note %d -> %d", result.voice + 1,
@@ -648,18 +739,34 @@ void P5XAudioProcessor::noteOn (int note, int velocity)
 
 void P5XAudioProcessor::noteOff (int note)
 {
-    allocator.noteOff (note);
     setHeld (note, false);
+
+    if (unisonActive)
+    {
+        unisonStack.keyUp (note, pedalDown);
+        unisonFallBack();
+        return;
+    }
+
+    allocator.noteOff (note);
 }
 
 void P5XAudioProcessor::sustainPedal (bool down)
 {
+    pedalDown = down;
     allocator.setSustainPedal (down);
+
+    if (unisonActive && ! down)
+    {
+        unisonStack.pedalUp();
+        unisonFallBack();
+    }
 }
 
 void P5XAudioProcessor::allSoundOff()
 {
     allocator.allSoundOff();
+    unisonStack.clear();
 
     // Hard cut (07-midi.md): also clear the downsampler and DC blocker so their tails don't ring on.
     if (downsampler != nullptr)
@@ -671,6 +778,8 @@ void P5XAudioProcessor::allSoundOff()
 void P5XAudioProcessor::allNotesOff()
 {
     allocator.allNotesOff();
+    unisonStack.clear();
+    pedalDown = false;
     heldNotes[0].store (0);
     heldNotes[1].store (0);
 }
@@ -679,11 +788,14 @@ void P5XAudioProcessor::resetAllControllers()
 {
     modWheelValue = 0.0f;
     wheelSmoother.setTarget (0.0f);
-    channelAftertouch = 0.0f;
-    voicePressure.fill (0.0f);
+    channelPressureSmoother.setTarget (0.0f);
+
+    for (auto& v : voices)
+        v.setPressure (0.0f);
+
     bendNormalised = 0.0f;
     bendSmoother.setTarget (0.0f);
-    allocator.setSustainPedal (false);
+    sustainPedal (false);
 }
 
 void P5XAudioProcessor::pitchBend (int value14)
@@ -701,13 +813,26 @@ void P5XAudioProcessor::modWheel (int value)
 
 void P5XAudioProcessor::channelPressure (int value)
 {
-    channelAftertouch = (float) value / 127.0f; // used from milestone 4
+    // One value for all voices; used only when perf_aftertouch is on (05-modulation.md § Aftertouch).
+    channelPressureSmoother.setTarget ((float) value / 127.0f);
 }
 
 void P5XAudioProcessor::polyPressure (int note, int value)
 {
+    const float pressure = (float) value / 127.0f;
+
+    // Unison: every voice is playing the current note.
+    if (unisonActive)
+    {
+        if (note == unisonNote)
+            for (int i = 0; i < allocator.getActiveVoiceCount(); ++i)
+                voices[(size_t) i].setPressure (pressure);
+
+        return;
+    }
+
     if (const int voice = allocator.findVoicePlayingNote (note); voice >= 0)
-        voicePressure[(size_t) voice] = (float) value / 127.0f;
+        voices[(size_t) voice].setPressure (pressure);
 }
 
 void P5XAudioProcessor::controlChange (int cc, int value)

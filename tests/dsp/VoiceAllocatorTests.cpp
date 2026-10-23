@@ -14,7 +14,7 @@ struct FakeVoice
     int note = -1, starts = 0;
 
     bool isIdle() const { return idle; }
-    void start (int n, float) { idle = false; releasing = false; note = n; ++starts; }
+    void start (int n, float, double = 0.0) { idle = false; releasing = false; note = n; ++starts; }
     void release() { if (! idle) releasing = true; }
     void kill() { idle = true; releasing = false; }
     void finish() { if (releasing) kill(); }

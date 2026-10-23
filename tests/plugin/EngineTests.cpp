@@ -44,7 +44,7 @@ TEST_CASE ("Engine: renders at 2x and reports the downsampler latency", "[plugin
     P5XAudioProcessor p;
     p.prepareToPlay (kRate, kBlock);
 
-    REQUIRE (P5XAudioProcessor::kOversamplingFactor == 2);
+    REQUIRE (p.getOversamplingFactor() == 2);
     REQUIRE (p.getLatencySamples() >= 1);
     REQUIRE (p.getLatencySamples() <= 16);
 
@@ -73,8 +73,9 @@ TEST_CASE ("Engine: same seed renders identically; a different seed differs", "[
 TEST_CASE ("Engine: voice telemetry for the Voices table", "[plugin][engine]")
 {
     P5XAudioProcessor p;
-    p.prepareToPlay (kRate, kBlock);
     setParam (p, "flt_env_amt", 0.0f);
+    setParam (p, "perf_vintage", 0.0f); // exact analytic cutoff and pitch
+    p.prepareToPlay (kRate, kBlock);
     process (p, kBlock, { { MidiMessage::noteOn (1, 69, (juce::uint8) 100), 0 } });
     process (p, kBlock);
 
