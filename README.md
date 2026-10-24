@@ -2,7 +2,7 @@
 
 A polyphonic virtual-analog synthesizer for Windows (VST3 + Standalone), by Jeet Patel.
 
-Status: **milestone 4** (extras + character), version 0.4.0: two oscillators with hard sync and Osc B Lo Freq, noise, mixer,
+Status: **milestone 4** (extras + character), version 0.4.1: two oscillators with hard sync and Osc B Lo Freq, noise, mixer,
 the resonant 4-pole filter, filter and amp envelopes, Poly-Mod, Wheel-Mod (LFO / pink noise on the mod wheel),
 velocity, aftertouch, unison, glide, Vintage (per-voice analog variation), 2× oversampling with an HQ 4× mode. The
 photoreal panel arrives in milestone 5. See `CLAUDE.md` and `docs/` for

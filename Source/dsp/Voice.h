@@ -7,6 +7,7 @@
 #include "dsp/Random.h"
 #include "dsp/Smoother.h"
 
+#include <cmath>
 #include <cstdint>
 
 namespace p5x::dsp
@@ -158,5 +159,29 @@ private:
     int driftEvery = 2, driftCountdown = 0;
 
     float lastOscAHz = 0.0f, lastOscBHz = 0.0f, lastCutoffHz = 0.0f;
+
+    // Remembers the last exp2 conversion: with steady pitch or cutoff the next sample reuses it
+    // (bit-identical; the conversion is a large share of a voice sample's serial work).
+    template <double (*Fn) (double)>
+    struct Cached
+    {
+        double in = -1.0e300, out = 0.0;
+        double convert (double x) noexcept
+        {
+            if (x != in)
+            {
+                in = x;
+                out = Fn (x);
+            }
+
+            return out;
+        }
+    };
+
+    static double noteToHz (double note) noexcept { return 440.0 * std::exp2 ((note - 69.0) / 12.0); }
+    static double octavesToScale (double octaves) noexcept { return std::exp2 (octaves); }
+
+    Cached<&Voice::noteToHz> hzA, hzB;
+    Cached<&Voice::octavesToScale> octaveScale;
 };
 } // namespace p5x::dsp

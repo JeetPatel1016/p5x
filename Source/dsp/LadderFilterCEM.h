@@ -22,5 +22,10 @@ private:
     double rate = 96000.0;
     double s1 = 0.0, s2 = 0.0, s3 = 0.0, s4 = 0.0;
     double excitation = 0.0;
+
+    // Coefficients are recomputed only when cutoff or resonance change (bit-identical results;
+    // tan and pow are the costliest steps of a voice sample when they don't move).
+    float lastCutoff = -1.0f, lastRes = -1.0f;
+    double G = 0.0, G4 = 0.0, k = 0.0;
 };
 } // namespace p5x::dsp

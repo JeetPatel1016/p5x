@@ -22,6 +22,7 @@ void LadderFilterCEM::reset() noexcept
 {
     s1 = s2 = s3 = s4 = 0.0;
     excitation = kStartupImpulse;
+    lastCutoff = lastRes = -1.0f; // force a coefficient update
 }
 
 float LadderFilterCEM::feedbackFor (float res01) noexcept
@@ -32,10 +33,20 @@ float LadderFilterCEM::feedbackFor (float res01) noexcept
 
 float LadderFilterCEM::process (float in, float cutoffHz, float res01) noexcept
 {
-    const double fc = std::clamp (std::isfinite (cutoffHz) ? (double) cutoffHz : 1000.0, 5.0, 0.45 * rate);
-    const double g = std::tan (std::numbers::pi * fc / rate);
-    const double G = g / (1.0 + g);
-    const double k = feedbackFor (std::isfinite (res01) ? res01 : 0.0f);
+    if (cutoffHz != lastCutoff)
+    {
+        lastCutoff = cutoffHz;
+        const double fc = std::clamp (std::isfinite (cutoffHz) ? (double) cutoffHz : 1000.0, 5.0, 0.45 * rate);
+        const double g = std::tan (std::numbers::pi * fc / rate);
+        G = g / (1.0 + g);
+        G4 = G * G * G * G;
+    }
+
+    if (res01 != lastRes)
+    {
+        lastRes = res01;
+        k = feedbackFor (std::isfinite (res01) ? res01 : 0.0f);
+    }
 
     const double x = (std::isfinite (in) ? (double) in : 0.0) + excitation;
     excitation = 0.0;
@@ -43,14 +54,14 @@ float LadderFilterCEM::process (float in, float cutoffHz, float res01) noexcept
     // Instantaneous response of the cascade: y4 = G^4 · u + S.
     const double oneMinusG = 1.0 - G;
     const double S = oneMinusG * (G * G * G * s1 + G * G * s2 + G * s3 + s4);
-    const double G4 = G * G * G * G;
 
     // Solve u = x - k · y4 exactly, then saturate the input stage.
     const double u = std::tanh ((x - k * S) / (1.0 + k * G4));
 
-    auto stage = [G] (double input, double& state)
+    const double g1 = G;
+    auto stage = [g1] (double input, double& state)
     {
-        const double v = (input - state) * G;
+        const double v = (input - state) * g1;
         const double y = v + state;
         state = y + v;
         return y;

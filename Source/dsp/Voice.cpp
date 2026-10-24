@@ -10,11 +10,6 @@ namespace
 {
 constexpr double kTwoPi = 6.283185307179586;
 constexpr uint64_t kVintageStream = 2000; // + voice index; voices use 0–9, global sources 1000+
-
-double noteToHz (double note) noexcept
-{
-    return 440.0 * std::exp2 ((note - 69.0) / 12.0);
-}
 } // namespace
 
 void Voice::Drift::step (Random& r, double size, double lowPass) noexcept
@@ -199,7 +194,7 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
         if (in.wmPwB)
             pwB += kModPulseWidth * wm;
 
-        double freqB = noteToHz (noteB);
+        double freqB = hzB.convert (noteB);
 
         if (in.oscBLoFreq)
             freqB /= kLoFreqDivisor;
@@ -226,7 +221,7 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
         if (in.pmPwA)
             pwA += kModPulseWidth * pm;
 
-        const double freqA = noteToHz (noteA);
+        const double freqA = hzA.convert (noteA);
         const double syncAt = in.syncA && oscB.wrappedThisSample() ? oscB.wrapFraction() : -1.0;
         const float a = oscA.process (freqA, pwA, in.shapesA, syncAt);
 
@@ -247,7 +242,7 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
         if (in.pmFilter)
             octaves += kPolyModOctaves * pm;
 
-        const auto cutoff = (float) (in.cutoffHz[i] * std::exp2 (octaves));
+        const auto cutoff = (float) (in.cutoffHz[i] * octaveScale.convert (octaves));
         const float filtered = filter.process (mix * kFilterDrive, cutoff, in.resonance[i]);
 
         // 7. VCA: × amp envelope × velocity gain.
