@@ -9,7 +9,6 @@
 | 5 | LFO shapes: the hardware may allow combining shapes; we use a single choice. Keep radio? | radio | milestone 5 |
 | 6 | Add a filter-cutoff destination for aftertouch? | Wheel-Mod amount only | after milestone 6 |
 | 7 | Pitch bend range lives in the settings dialog (no panel control). OK? | settings dialog | milestone 5 |
-| 8 | Modulation depths (Wheel-Mod ±12 st, Poly-Mod +48 st / +5 oct, filter env +8 oct): tune by ear | as in 05-modulation.md | milestone 4 |
 | 9 | Factory preset list: names and categories for the 40 patches | none yet | milestone 6 |
 | 10 | Milestone 7 SSM2040 mode needs its own spec (filter model + envelope curve differences) before starting | – | milestone 7 |
 | 13 | Where does the preset **name** show? The chosen look has a 3-digit 7-segment readout, which can only show the number | small light-grey text line under the display | milestone 5 |

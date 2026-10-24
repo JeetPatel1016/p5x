@@ -1,6 +1,6 @@
 # 05 · Modulation: LFO, Poly-Mod, Wheel-Mod, velocity, aftertouch
 
-All depths below are **P5X initial values**. Tune by ear in milestone 4 and log any change in DECISIONS.md.
+All depths below are **P5X values**, kept after the milestone 4 listening check (DECISIONS.md 2026-10-23). Log any later change in DECISIONS.md.
 
 ## LFO (global, one for the whole instrument)
 - Rate `lfo_rate`, 0.05–30 Hz. Runs at the **host rate** (not oversampled), linearly interpolated to the internal rate.
