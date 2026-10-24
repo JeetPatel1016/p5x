@@ -31,12 +31,14 @@ inline float getParam (P5XAudioProcessor& p, const char* id)
 }
 
 // A near-sine patch for pitch measurements: Osc A saw only, low fixed cutoff, no filter envelope,
-// so each period has one rising zero crossing.
+// so each period has one rising zero crossing. Vintage 0: pitch tests assert exact tuning, and Vintage
+// (default 0.25) detunes each voice by a seed-dependent few cents (06-voices.md § Vintage).
 inline void setPurePatch (P5XAudioProcessor& p)
 {
     setParam (p, "mix_osc_b", 0.0f);
     setParam (p, "flt_cutoff", 700.0f);
     setParam (p, "flt_env_amt", 0.0f);
+    setParam (p, "perf_vintage", 0.0f);
 }
 
 struct TimedMessage

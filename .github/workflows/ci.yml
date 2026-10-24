@@ -33,7 +33,22 @@ jobs:
         run: cmake --build --preset ${{ matrix.config == 'Debug' && 'debug' || 'release' }} --parallel
 
       - name: Test
-        run: ctest --preset ${{ matrix.config == 'Debug' && 'debug' || 'release' }} --output-on-failure
+        shell: pwsh
+        run: |
+          ctest --preset ${{ matrix.config == 'Debug' && 'debug' || 'release' }} --output-on-failure
+          if ($LASTEXITCODE -ne 0) {
+            # Name each failed test in a public annotation (step logs need a sign-in).
+            Get-ChildItem build/Testing/Temporary/LastTestsFailed*.log -ErrorAction SilentlyContinue |
+              Get-Content | ForEach-Object { Write-Output "::error title=Test failed (${{ matrix.config }})::$_" }
+            exit 1
+          }
+
+      - name: Report CPU (performance test)
+        if: always() && matrix.config == 'Release'
+        shell: pwsh
+        run: |
+          $lines = & build\tests\Release\p5x_plugin_tests.exe "[performance]" | Select-String "performance:|profile:"
+          $lines | ForEach-Object { Write-Output "::notice title=CPU::$($_.Line.Trim())" }
 
       - name: Download pluginval 1.0.4
         shell: pwsh
