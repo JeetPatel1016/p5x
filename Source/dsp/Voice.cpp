@@ -44,6 +44,7 @@ void Voice::prepare (double internalRate, uint64_t seed, int voiceIndex, int ove
     filterEnvelope.prepare (rate);
     ampEnvelope.prepare (rate);
     pressure.prepare (rate, 20.0); // aftertouch: Lin 20 (05-modulation.md § Aftertouch)
+    velocityNow.prepare (rate, kVelocityRampMs);
 
     // Vintage offsets at Vintage = 1, drawn once (06-voices.md § Vintage).
     vintageDetuneA = vintageRandom.nextBipolar() * kVintageDetuneCents;
@@ -76,6 +77,7 @@ void Voice::reset() noexcept
     ampEnvelope.reset();
     filter.reset();
     pressure.reset (0.0f);
+    velocityNow.reset (velocity);
     lastOscAHz = lastOscBHz = lastCutoffHz = 0.0f;
 }
 
@@ -105,6 +107,14 @@ void Voice::start (int midiNote, float velocity01, double glideSeconds, double f
     // Oscillators never reset phase on note-on (02-oscillators.md § Free-running phase).
     beginGlide (fromNote >= 0.0 ? fromNote : pitch, midiNote, glideSeconds);
     velocity = velocity01;
+
+    // From silence the new velocity applies at once; on a voice still sounding (stolen, reused while
+    // releasing) it ramps over kVelocityRampMs so the gain doesn't step.
+    if (ampEnvelope.isIdle())
+        velocityNow.reset (velocity01);
+    else
+        velocityNow.setTarget (velocity01);
+
     pressure.setTarget (0.0f); // a new note starts with no poly pressure
     filterEnvelope.gateOn();
     ampEnvelope.gateOn();
@@ -131,10 +141,6 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
     if (ampEnvelope.isIdle())
         return; // idle voices don't advance their oscillators (02-oscillators.md § Edge cases)
 
-    // Velocity (05-modulation.md § Velocity): v = 1 when off.
-    const float ampVelocity = in.velocityOn ? 0.25f + 0.75f * velocity : 1.0f;
-    const float filterVelocity = in.velocityOn ? 0.5f + 0.5f * velocity : 1.0f;
-
     EnvParams filterParams = in.filterEnv;
     EnvParams ampParams = in.ampEnv;
 
@@ -159,6 +165,11 @@ void Voice::render (float* out, const VoiceInputs& in, int numSamples) noexcept
         const double offsetA = (unisonCents + vintage * (vintageDetuneA + driftA.value)) * 0.01;
         const double offsetB = (unisonCents + vintage * (vintageDetuneB + driftB.value)) * 0.01;
         const float envScale = 1.0f + vintage * (float) vintageEnv;
+
+        // Velocity (05-modulation.md § Velocity): v = 1 when off.
+        const float v = velocityNow.next();
+        const float ampVelocity = in.velocityOn ? 0.25f + 0.75f * v : 1.0f;
+        const float filterVelocity = in.velocityOn ? 0.5f + 0.5f * v : 1.0f;
 
         // Aftertouch raises the Wheel-Mod amount: max(wheel, pressure) (05 § Aftertouch).
         const float voicePressure = pressure.next();

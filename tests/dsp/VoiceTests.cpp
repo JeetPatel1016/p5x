@@ -569,3 +569,43 @@ TEST_CASE ("Voice: unison detune and gain", "[dsp][voice][m4]")
     render (unison, p, 64);
     REQUIRE (1200.0 * std::log2 (unison.getOscAHz() / 261.6256) == Approx (7.0).margin (0.01));
 }
+
+TEST_CASE ("Voice: reusing a sounding voice with a new velocity doesn't step its level", "[dsp][voice][m4]")
+{
+    // Regression (user report, pedal-lift click): a voice still in its release is restarted by the
+    // next chord with a different velocity. The restart's own attack is expected; a velocity change
+    // must add no step on top of it.
+    auto stepAcrossRestart = [] (float first, float second)
+    {
+        Params p;
+        p.in.velocityOn = true;
+        p.in.shapesB = { false, true, false }; // triangle on B only: a smooth signal, steps stand out
+        p.mixA.fill (0.0f);
+        p.mixB.fill (1.0f);
+        p.envAmt.fill (0.0f);
+
+        Voice v;
+        v.prepare (kRate, 1, 0);
+        v.start (60, first);
+        render (v, p, 9600);
+        v.release();
+        render (v, p, 2880); // 30 ms into the 0.2 s release: still clearly audible
+
+        const auto before = render (v, p, 64);
+        v.start (60, second);
+        const auto after = render (v, p, 64);
+
+        float step = std::abs (after[0] - before.back());
+
+        for (size_t i = 1; i < 8; ++i)
+            step = std::max (step, std::abs (after[i] - after[i - 1]));
+
+        return step;
+    };
+
+    const float soft = 40.0f / 127.0f;
+    const float sameUp = stepAcrossRestart (soft, soft), sameDown = stepAcrossRestart (1.0f, 1.0f);
+
+    REQUIRE (stepAcrossRestart (soft, 1.0f) < 1.5f * std::max (sameUp, sameDown));
+    REQUIRE (stepAcrossRestart (1.0f, soft) < 1.5f * std::max (sameUp, sameDown));
+}

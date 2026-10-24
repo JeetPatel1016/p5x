@@ -52,7 +52,7 @@ When on, with `v = velocity / 127`:
 - Amp: VCA gain × `(0.25 + 0.75 * v)`.
 - Filter envelope: the envelope's output level is scaled by `(0.5 + 0.5 * v)`. That scaled level feeds both the filter (× `flt_env_amt` × 8 octaves, see 03-filter.md) and Poly-Mod's filter-env source. For the filter this is the same as scaling `flt_env_amt`.
 
-When off, `v` is treated as 1 (full level for every note). Velocity is captured at note-on and fixed for the note.
+When off, `v` is treated as 1 (full level for every note). Velocity is captured at note-on and fixed for the note. Exception: when a voice that is still sounding (releasing, or stolen) is restarted, its velocity moves to the new value over 5 ms instead of jumping, because a gain step on an audible voice clicks. A voice starting from silence takes the new velocity at once.
 
 ## Aftertouch (`perf_aftertouch`)
 - When on, aftertouch pushes up the Wheel-Mod amount: `amount = max(modWheel, at)`, where `at` is the smoothed aftertouch (Lin 20 ms).

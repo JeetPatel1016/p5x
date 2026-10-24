@@ -70,6 +70,10 @@ public:
     static constexpr double kVintageDetuneCents = 8.0, kVintageCutoffOctaves = 0.2, kVintageEnvScale = 0.1;
     static constexpr double kDriftCents = 4.0, kDriftCrossSeconds = 10.0, kDriftLowPassHz = 0.3;
 
+    // A sounding voice restarted with a new velocity moves to it over this time instead of jumping
+    // (a gain step on an audible voice clicks: DECISIONS.md 2026-10-23).
+    static constexpr double kVelocityRampMs = 5.0;
+
     // Seeds the voice's Random from the instance seed and voice index, so repeated prepare calls
     // and reloads give the same initial phases, noise and Vintage offsets (00-architecture.md
     // § Randomness). Vintage draws from its own stream so Vintage 0 leaves phases and noise as they
@@ -137,7 +141,7 @@ private:
     Oscillator oscA, oscB;
     LadderFilterCEM filter;
     Envelope filterEnvelope, ampEnvelope;
-    LinearSmoother pressure;
+    LinearSmoother pressure, velocityNow; // velocityNow: the velocity in effect, ramping on restarts
 
     int note = 60;
     double pitch = 60.0, glideStep = 0.0;
