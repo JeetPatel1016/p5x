@@ -8,7 +8,7 @@
 namespace p5x::dsp
 {
 // Poly voice assignment, sustain pedal and stealing (06-voices.md § Allocation, § Sustain pedal).
-// VoiceType needs: isIdle(), start (note, velocity01), release(), kill().
+// VoiceType needs: isIdle(), start (note, velocity01, glideSeconds), release(), kill().
 // Never logs (dsp/ is standard-library only); steals are reported in NoteOnResult.
 template <typename VoiceType, int MaxVoices>
 class VoiceAllocator
@@ -34,7 +34,7 @@ public:
     void setActiveVoiceCount (int count) noexcept { activeCount = std::clamp (count, 1, MaxVoices); }
     int getActiveVoiceCount() const noexcept { return activeCount; }
 
-    NoteOnResult noteOn (int note, float velocity01) noexcept
+    NoteOnResult noteOn (int note, float velocity01, double glideSeconds = 0.0) noexcept
     {
         NoteOnResult result;
 
@@ -78,7 +78,7 @@ public:
         slot.age = ++ageCounter;
         lastAssigned = result.voice;
 
-        voices[(size_t) result.voice].start (note, velocity01);
+        voices[(size_t) result.voice].start (note, velocity01, glideSeconds); // glides from its own last note
         return result;
     }
 

@@ -18,7 +18,7 @@ struct FakeVoice
     bool idle = true, releasing = false;
 
     bool isIdle() const { return idle; }
-    void start (int, float) { idle = false; releasing = false; }
+    void start (int, float, double = 0.0) { idle = false; releasing = false; }
     void release() { if (! idle) releasing = true; }
     void kill() { idle = true; releasing = false; }
 };

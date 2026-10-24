@@ -44,7 +44,7 @@ TEST_CASE ("Engine: renders at 2x and reports the downsampler latency", "[plugin
     P5XAudioProcessor p;
     p.prepareToPlay (kRate, kBlock);
 
-    REQUIRE (P5XAudioProcessor::kOversamplingFactor == 2);
+    REQUIRE (p.getOversamplingFactor() == 2);
     REQUIRE (p.getLatencySamples() >= 1);
     REQUIRE (p.getLatencySamples() <= 16);
 
@@ -73,8 +73,9 @@ TEST_CASE ("Engine: same seed renders identically; a different seed differs", "[
 TEST_CASE ("Engine: voice telemetry for the Voices table", "[plugin][engine]")
 {
     P5XAudioProcessor p;
-    p.prepareToPlay (kRate, kBlock);
     setParam (p, "flt_env_amt", 0.0f);
+    setParam (p, "perf_vintage", 0.0f); // exact analytic cutoff and pitch
+    p.prepareToPlay (kRate, kBlock);
     process (p, kBlock, { { MidiMessage::noteOn (1, 69, (juce::uint8) 100), 0 } });
     process (p, kBlock);
 
@@ -152,4 +153,51 @@ TEST_CASE ("Engine: the VST3 layout has no input and rejects one", "[plugin][eng
 
     p.setRouteInput (true);
     REQUIRE_FALSE (p.isRoutingInput());
+}
+
+TEST_CASE ("Engine: a voice ending after a short release doesn't click", "[plugin][engine]")
+{
+    // Regression (DECISIONS.md 2026-10-23): a 25 % pulse has DC; with per-voice DC blockers, a voice
+    // going idle cut its blocker mid-tail and the output stepped by up to -5 dB of the note's peak.
+    P5XAudioProcessor p (false);
+    loadSeed (p, 1);
+    setParam (p, "osc_a_saw", 0.0f);
+    setParam (p, "osc_a_pulse", 1.0f);
+    setParam (p, "osc_a_pw", 0.25f);
+    setParam (p, "mix_osc_b", 0.0f);
+    setParam (p, "flt_cutoff", 300.0f);
+    setParam (p, "flt_env_amt", 0.0f);
+    setParam (p, "aenv_release", 0.0015f);
+    constexpr int block = 16;
+    p.prepareToPlay (kRate, block);
+
+    process (p, block, { { MidiMessage::noteOn (1, 48, (juce::uint8) 100), 0 } });
+
+    for (int b = 0; b < (int) (0.3 * kRate / block); ++b)
+        process (p, block);
+
+    // Note off, then 16-sample blocks until the telemetry shows the voice has gone idle.
+    std::vector<float> tail;
+    int idleBlock = -1;
+
+    for (int b = 0; b < 200; ++b)
+    {
+        const auto buffer = b == 0 ? process (p, block, { { MidiMessage::noteOff (1, 48), 0 } }) : process (p, block);
+        tail.insert (tail.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + block);
+
+        if (idleBlock < 0 && p.getTelemetry().activeVoices == 0)
+            idleBlock = b;
+    }
+
+    REQUIRE (idleBlock > 0);
+
+    // Around the moment the voice stops (its envelope is below 1e-5 by then) the output must not step.
+    // Window: the block it went idle in, plus the downsampler's latency.
+    const size_t from = (size_t) (idleBlock * block), to = from + (size_t) (2 * block + p.getLatencySamples());
+    float largestStep = 0.0f;
+
+    for (size_t i = from; i < to; ++i)
+        largestStep = std::max (largestStep, std::abs (tail[i] - tail[i - 1]));
+
+    REQUIRE (largestStep < 2.0e-4f);
 }

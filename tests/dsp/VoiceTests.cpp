@@ -7,6 +7,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <memory>
+#include <vector>
 
 using Catch::Approx;
 using p5x::dsp::Voice;
@@ -21,7 +23,7 @@ constexpr int kMax = 4096;
 struct Params
 {
     std::array<float, kMax> pitch {}, pwA {}, pwB {}, fine {}, mixA {}, mixB {}, noise {}, cutoff {}, res {}, envAmt {},
-        fSus {}, aSus {}, tune {}, wmSource {}, wmAmount {}, pmFilterEnv {}, pmOscB {};
+        fSus {}, aSus {}, tune {}, wmSource {}, wmAmount {}, pmFilterEnv {}, pmOscB {}, pressure {}, vintage {};
     VoiceInputs in;
 
     Params()
@@ -49,6 +51,8 @@ struct Params
         in.wheelModAmount = wmAmount.data();
         in.pmFilterEnv = pmFilterEnv.data();
         in.pmOscB = pmOscB.data();
+        in.channelPressure = pressure.data();
+        in.vintage = vintage.data();
         in.pwA = pwA.data();
         in.pwB = pwB.data();
         in.fineB = fine.data();
@@ -371,4 +375,237 @@ TEST_CASE ("Voice: Poly-Mod filter envelope depths", "[dsp][voice][mod]")
 
     REQUIRE (v.getOscAHz() == Approx (130.8128 * 2.0).epsilon (1e-3));             // C3 + 12 st
     REQUIRE (v.getCutoffHz() == Approx (100.0 * std::exp2 (1.25)).epsilon (1e-3)); // + 1.25 octaves
+}
+
+//==================================================================================================
+// Milestone 4: velocity, aftertouch, glide, Vintage, unison detune/gain (05-modulation.md, 06-voices.md).
+
+namespace
+{
+std::vector<float> renderNote (const Params& p, int note, float velocity, uint64_t seed = 4, size_t n = 9600)
+{
+    Voice v;
+    v.prepare (kRate, seed, 1);
+    v.start (note, velocity);
+    return render (v, p, n);
+}
+} // namespace
+
+TEST_CASE ("Voice: velocity off renders every velocity identically", "[dsp][voice][m4]")
+{
+    Params p; // velocityOn defaults to false
+    REQUIRE (renderNote (p, 60, 10.0f / 127.0f) == renderNote (p, 60, 1.0f));
+}
+
+TEST_CASE ("Voice: velocity scales the amp by 0.25 + 0.75 v", "[dsp][voice][m4]")
+{
+    Params p;
+    p.in.velocityOn = true;
+    p.envAmt.fill (0.0f); // the filter envelope doesn't move the cutoff here
+    const auto loud = renderNote (p, 60, 1.0f), soft = renderNote (p, 60, 0.0f);
+
+    for (size_t i = 0; i < loud.size(); ++i)
+        REQUIRE (soft[i] == Approx (loud[i] * 0.25f).margin (1e-7));
+}
+
+TEST_CASE ("Voice: velocity scales the filter envelope by 0.5 + 0.5 v", "[dsp][voice][m4]")
+{
+    Params p;
+    p.in.velocityOn = true;
+    p.cutoff.fill (500.0f);
+    p.envAmt.fill (0.25f); // full envelope × 0.25 × 8 = 2 octaves at v = 1
+    p.fSus.fill (1.0f);
+
+    Voice v;
+    v.prepare (kRate, 1, 0);
+    v.start (60, 0.0f);
+    render (v, p, 9600);
+    REQUIRE (v.getCutoffHz() == Approx (1000.0f).epsilon (1e-3)); // 1 octave at v = 0
+
+    v.start (60, 1.0f);
+    render (v, p, 9600);
+    REQUIRE (v.getCutoffHz() == Approx (2000.0f).epsilon (1e-3));
+}
+
+TEST_CASE ("Voice: aftertouch raises the Wheel-Mod amount to max(wheel, pressure)", "[dsp][voice][m4]")
+{
+    Params p;
+    p.envAmt.fill (0.0f);
+    p.wmSource.fill (1.0f);
+    p.in.wmFreqA = true;
+    p.in.aftertouchOn = true;
+
+    Voice v;
+    v.prepare (kRate, 1, 0);
+    v.start (60, 1.0f);
+
+    p.pressure.fill (0.5f); // channel pressure: +6 st
+    render (v, p, 256);
+    REQUIRE (v.getOscAHz() == Approx (261.6256 * std::pow (2.0, 0.5)).epsilon (1e-4));
+
+    p.wmAmount.fill (0.75f); // the wheel is higher: it wins
+    render (v, p, 256);
+    REQUIRE (v.getOscAHz() == Approx (261.6256 * std::pow (2.0, 0.75)).epsilon (1e-4));
+
+    p.wmAmount.fill (0.0f);
+    p.pressure.fill (0.0f);
+    v.setPressure (1.0f); // poly pressure, smoothed over 20 ms
+    render (v, p, 4096);
+    REQUIRE (v.getOscAHz() == Approx (261.6256 * 2.0).epsilon (1e-4));
+
+    p.in.aftertouchOn = false; // off: pressure is ignored completely
+    render (v, p, 256);
+    REQUIRE (v.getOscAHz() == Approx (261.6256).epsilon (1e-4));
+}
+
+TEST_CASE ("Voice: glide 0.5 s from C3 to C4 passes F#3 at 0.25 s", "[dsp][voice][m4]")
+{
+    Params p;
+    Voice v;
+    v.prepare (kRate, 1, 0);
+
+    v.start (48, 1.0f, 0.5); // the voice's first note never glides
+    REQUIRE (v.getPitch() == 48.0);
+    render (v, p, 256);
+
+    v.start (60, 1.0f, 0.5);
+    render (v, p, (size_t) (0.25 * kRate));
+    REQUIRE (v.getPitch() == Approx (54.0).margin (0.1)); // F#3 ± 10 cents
+
+    render (v, p, (size_t) (0.3 * kRate));
+    REQUIRE (v.getPitch() == 60.0); // lands exactly
+
+    // Released to idle, then a new note: glides from this voice's last note (06 § Glide).
+    v.release();
+    render (v, p, (size_t) kRate);
+    REQUIRE (v.isIdle());
+    v.start (72, 1.0f, 0.5);
+    REQUIRE (v.getPitch() == 60.0);
+
+    // Glide 0: instant.
+    v.start (36, 1.0f, 0.0);
+    REQUIRE (v.getPitch() == 36.0);
+}
+
+TEST_CASE ("Voice: Vintage 0 is exact; offsets scale with Vintage within their ranges", "[dsp][voice][m4]")
+{
+    Params p;
+    p.envAmt.fill (0.0f);
+    p.cutoff.fill (1000.0f);
+
+    Voice v;
+    v.prepare (kRate, 77, 3);
+    v.start (69, 1.0f);
+    render (v, p, 512);
+    REQUIRE (v.getOscAHz() == 440.0f); // Vintage 0: no detune, no drift
+    REQUIRE (v.getCutoffHz() == 1000.0f);
+
+    REQUIRE (std::abs (v.getVintageDetuneA()) <= Voice::kVintageDetuneCents);
+    REQUIRE (std::abs (v.getVintageDetuneB()) <= Voice::kVintageDetuneCents);
+    REQUIRE (std::abs (v.getVintageCutoff()) <= Voice::kVintageCutoffOctaves);
+    REQUIRE (std::abs (v.getVintageEnvScale()) <= Voice::kVintageEnvScale);
+
+    p.vintage.fill (1.0f);
+    render (v, p, 512);
+    const double cents = 1200.0 * std::log2 (v.getOscAHz() / 440.0);
+    REQUIRE (cents == Approx (v.getVintageDetuneA() + v.getDriftA()).margin (0.01));
+    REQUIRE (v.getCutoffHz() == Approx (1000.0 * std::exp2 (v.getVintageCutoff())).epsilon (1e-4));
+}
+
+TEST_CASE ("Voice: Vintage draws differ between voices and seeds, repeat for the same seed", "[dsp][voice][m4]")
+{
+    auto detune = [] (uint64_t seed, int index)
+    {
+        Voice v;
+        v.prepare (kRate, seed, index);
+        return v.getVintageDetuneA();
+    };
+
+    REQUIRE (detune (5, 0) == detune (5, 0));
+    REQUIRE (detune (5, 0) != detune (5, 1));
+    REQUIRE (detune (5, 0) != detune (6, 0));
+}
+
+TEST_CASE ("Voice: Vintage drift wanders within +-4 cents", "[dsp][voice][m4]")
+{
+    auto p = std::make_unique<Params>();
+    p->aSus.fill (1.0f);
+
+    Voice v;
+    v.prepare (kRate, 9, 0);
+    v.start (60, 1.0f);
+
+    double lowest = 0.0, highest = 0.0;
+
+    for (int s = 0; s < 120; ++s) // two minutes, sampled every second
+    {
+        render (v, *p, (size_t) kRate);
+        lowest = std::min (lowest, v.getDriftA());
+        highest = std::max (highest, v.getDriftA());
+    }
+
+    REQUIRE (lowest >= -Voice::kDriftCents);
+    REQUIRE (highest <= Voice::kDriftCents);
+    REQUIRE (highest - lowest > 2.0); // it really wanders (a 10 s crossing time over 2 minutes)
+}
+
+TEST_CASE ("Voice: unison detune and gain", "[dsp][voice][m4]")
+{
+    Params p;
+    p.envAmt.fill (0.0f);
+
+    Voice plain, unison;
+    plain.prepare (kRate, 4, 1);
+    unison.prepare (kRate, 4, 1);
+    unison.setUnison (0.0, 0.5f);
+    plain.start (60, 1.0f);
+    unison.start (60, 1.0f);
+    const auto a = render (plain, p, 4096), b = render (unison, p, 4096);
+
+    for (size_t i = 0; i < a.size(); ++i)
+        REQUIRE (b[i] == Approx (a[i] * 0.5f).margin (1e-7));
+
+    unison.setUnison (7.0, 1.0f);
+    render (unison, p, 64);
+    REQUIRE (1200.0 * std::log2 (unison.getOscAHz() / 261.6256) == Approx (7.0).margin (0.01));
+}
+
+TEST_CASE ("Voice: reusing a sounding voice with a new velocity doesn't step its level", "[dsp][voice][m4]")
+{
+    // Regression (user report, pedal-lift click): a voice still in its release is restarted by the
+    // next chord with a different velocity. The restart's own attack is expected; a velocity change
+    // must add no step on top of it.
+    auto stepAcrossRestart = [] (float first, float second)
+    {
+        Params p;
+        p.in.velocityOn = true;
+        p.in.shapesB = { false, true, false }; // triangle on B only: a smooth signal, steps stand out
+        p.mixA.fill (0.0f);
+        p.mixB.fill (1.0f);
+        p.envAmt.fill (0.0f);
+
+        Voice v;
+        v.prepare (kRate, 1, 0);
+        v.start (60, first);
+        render (v, p, 9600);
+        v.release();
+        render (v, p, 2880); // 30 ms into the 0.2 s release: still clearly audible
+
+        const auto before = render (v, p, 64);
+        v.start (60, second);
+        const auto after = render (v, p, 64);
+
+        float step = std::abs (after[0] - before.back());
+
+        for (size_t i = 1; i < 8; ++i)
+            step = std::max (step, std::abs (after[i] - after[i - 1]));
+
+        return step;
+    };
+
+    const float soft = 40.0f / 127.0f;
+    const float sameUp = stepAcrossRestart (soft, soft), sameDown = stepAcrossRestart (1.0f, 1.0f);
+
+    REQUIRE (stepAcrossRestart (soft, 1.0f) < 1.5f * std::max (sameUp, sameDown));
+    REQUIRE (stepAcrossRestart (1.0f, soft) < 1.5f * std::max (sameUp, sameDown));
 }

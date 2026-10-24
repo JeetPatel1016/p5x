@@ -51,6 +51,7 @@ set(PLUGIN_TEST_SOURCES
     plugin/TestProcessor.h
     plugin/AliasingTests.cpp
     plugin/EngineTests.cpp
+    plugin/ExtrasTests.cpp
     plugin/GoldenTests.cpp
     plugin/ModulationTests.cpp
     plugin/IdentityTests.cpp

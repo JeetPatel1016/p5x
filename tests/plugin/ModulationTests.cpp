@@ -120,6 +120,7 @@ TEST_CASE ("Modulation: Reset All Controllers returns the wheel to 0", "[plugin]
     P5XAudioProcessor p (false);
     setParam (p, "wm_dest_freq_a", 1.0f);
     loadSeed (p, 5);
+    setParam (p, "perf_vintage", 0.0f); // exact analytic pitch
     setParam (p, "lfo_rate", 0.05f); // square: at ±1 except during its 1 ms slews, 10 s apart
     setParam (p, "lfo_shape", 2.0f);
     p.prepareToPlay (kRate, 480);

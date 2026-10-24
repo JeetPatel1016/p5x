@@ -57,9 +57,10 @@ void addRandomMidi (juce::MidiBuffer& midi, p5x::Random& random, int blockSize, 
     }
 }
 
-Stats runCase (double sampleRate, int blockSize, bool variableBlocks, uint64_t seed)
+Stats runCase (double sampleRate, int blockSize, bool variableBlocks, uint64_t seed, bool hq = false)
 {
     P5XAudioProcessor processor;
+    processor.setHqMode (hq);
     processor.prepareToPlay (sampleRate, blockSize);
 
     // Map a few CCs so random CCs exercise MIDI Learn on the audio thread too.
@@ -130,6 +131,24 @@ TEST_CASE ("Robustness: random params + MIDI at every rate and block size", "[pl
         {
             INFO ("rate " << rate << ", block " << blockSize);
             const auto stats = runCase (rate, blockSize, false, seed++);
+
+            REQUIRE (stats.finite);
+            REQUIRE (stats.peak < 4.0f);
+            REQUIRE (stats.allocations == 0);
+        }
+    }
+}
+
+TEST_CASE ("Robustness: HQ mode (4x) at several rates and block sizes", "[plugin][robustness][rt][hq][slow]")
+{
+    uint64_t seed = 500;
+
+    for (double rate : { 44100.0, 96000.0 })
+    {
+        for (int blockSize : { 1, 64, 4096 })
+        {
+            INFO ("HQ, rate " << rate << ", block " << blockSize);
+            const auto stats = runCase (rate, blockSize, false, seed++, true);
 
             REQUIRE (stats.finite);
             REQUIRE (stats.peak < 4.0f);

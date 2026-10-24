@@ -3,6 +3,7 @@
 
 #include "debug/LogService.h"
 #include "debug/Telemetry.h"
+#include "dsp/NoteStack.h"
 #include "dsp/OutputStage.h"
 #include "dsp/Smoother.h"
 #include "dsp/Voice.h"
@@ -30,7 +31,7 @@ class P5XAudioProcessor final : public juce::AudioProcessor,
 public:
     static constexpr int kMaxVoices = 10;
     static constexpr int kMonitorHistory = 200;
-    static constexpr int kOversamplingFactor = 2; // 00-architecture.md § Oversampling (HQ 4× arrives in milestone 4)
+    static constexpr int kOversamplingNormal = 2, kOversamplingHq = 4; // 00-architecture.md § Oversampling
 
     // The Standalone app gets a stereo input bus for "Route input into filter"; the VST3 is output-only.
     P5XAudioProcessor();
@@ -99,6 +100,7 @@ public:
     p5x::midi::Takeover getTakeover() const noexcept { return midiLearn.getTakeover(); }
     void setTakeover (p5x::midi::Takeover mode) { midiLearn.setTakeover (mode); }
     bool isHqMode() const noexcept { return hqMode.load(); }
+    int getOversamplingFactor() const noexcept { return oversampling; } // in effect since the last prepareToPlay
     void setHqMode (bool on) { hqMode.store (on); }
     bool isProgramChangeEnabled() const noexcept { return programChangeEnabled.load(); }
     void setProgramChangeEnabled (bool on) { programChangeEnabled.store (on); }
@@ -163,6 +165,8 @@ private:
         sPmOscB,
         sWheelAmount,
         sWheelSource,
+        sChannelPressure,
+        sVintage,
         kNumSmoothed
     };
 
@@ -178,6 +182,7 @@ private:
         int lfoRate, lfoShape;
         int wmMix, wmDestFreqA, wmDestFreqB, wmDestPwA, wmDestPwB, wmDestFilter;
         int masterTune, masterVolume, bendRange, perfVoices;
+        int perfGlide, perfVintage, perfUnison, perfVelocity, perfAftertouch;
     };
 
     void handleMidiEvent (const uint8_t* data, int size);
@@ -187,6 +192,9 @@ private:
     float effectiveValue (int paramIndex) noexcept; // real units, honouring MIDI Learn overrides
     bool effectiveBool (int paramIndex) noexcept { return effectiveValue (paramIndex) >= 0.5f; }
     void applyVoiceCountIfIdle();
+    void setUnisonMode (bool on);
+    void applyUnisonVoices() noexcept;
+    void unisonFallBack();
     void setHeld (int note, bool held) noexcept;
     int measureDownsamplerLatency (int maxBlock) const;
 
@@ -218,21 +226,29 @@ private:
     // Internal-rate smoothers and their per-sample arrays (length = 2 × chunk capacity).
     p5x::dsp::LinearSmoother bendSmoother, tuneSmoother, pwASmoother, pwBSmoother, fineBSmoother, mixASmoother,
         mixBSmoother, mixNoiseSmoother, resSmoother, envAmtSmoother, fSustainSmoother, aSustainSmoother,
-        pmFilterEnvSmoother, pmOscBSmoother, wheelSmoother;
+        pmFilterEnvSmoother, pmOscBSmoother, wheelSmoother, channelPressureSmoother, vintageSmoother;
     p5x::dsp::LogSmoother cutoffSmoother;
     p5x::dsp::WheelModSource wheelModSource; // host rate, interpolated up
     std::array<std::vector<float>, kNumSmoothed> smoothed;
 
     // Host-rate output stage.
     p5x::dsp::LinearSmoother volumeSmoother;
+    p5x::dsp::DcBlocker dcBlocker;
     std::vector<float> hostScratch, zeros;
     std::unique_ptr<juce::dsp::Oversampling<float>> downsampler, inputUpsampler;
 
     double hostRate = 48000.0, internalRate = 96000.0;
     int chunkCapacity = 0;
     float bendNormalised = 0.0f; // −1 … +1
-    float modWheelValue = 0.0f, channelAftertouch = 0.0f;
-    std::array<float, kMaxVoices> voicePressure {};
+    float modWheelValue = 0.0f;
+    int oversampling = kOversamplingNormal; // 2, or 4 in HQ mode (applied at prepareToPlay)
+
+    // Unison (06-voices.md § Unison) and glide.
+    p5x::dsp::NoteStack unisonStack;
+    bool unisonActive = false, pedalDown = false;
+    int unisonNote = -1;
+    float unisonVelocity = 1.0f;
+    double glideSeconds = 0.0;
     double testTonePhase = 0.0;
     int testToneRemaining = 0;
     float cpuSmoothed = 0.0f;

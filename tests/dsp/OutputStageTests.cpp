@@ -4,6 +4,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <vector>
 
 using Catch::Approx;
@@ -52,4 +54,35 @@ TEST_CASE ("Safety clipper: block processing reports engagement", "[dsp][output]
     REQUIRE (loud[0] == 0.1f);
     REQUIRE (loud[1] < 1.0f);
     REQUIRE (loud[2] > -1.0f);
+}
+
+TEST_CASE ("DC blocker: removes DC, passes audio, -3 dB near 5 Hz", "[dsp][output]")
+{
+    constexpr double rate = 48000.0;
+    p5x::dsp::DcBlocker blocker;
+    blocker.prepare (rate);
+
+    std::vector<float> dc ((size_t) rate * 2, 0.5f);
+    blocker.processBlock (dc.data(), (int) dc.size());
+    REQUIRE (std::abs (dc.back()) < 1.0e-4f);
+
+    auto gainAt = [&] (double hz)
+    {
+        blocker.reset();
+        std::vector<float> x ((size_t) rate * 4);
+
+        for (size_t i = 0; i < x.size(); ++i)
+            x[i] = (float) std::sin (2.0 * 3.141592653589793 * hz * (double) i / rate);
+
+        blocker.processBlock (x.data(), (int) x.size());
+        float peak = 0.0f;
+
+        for (size_t i = x.size() / 2; i < x.size(); ++i)
+            peak = std::max (peak, std::abs (x[i]));
+
+        return peak;
+    };
+
+    REQUIRE (gainAt (100.0) > 0.99f);
+    REQUIRE (gainAt (5.0) == Catch::Approx (0.707).margin (0.03));
 }

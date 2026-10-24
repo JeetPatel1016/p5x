@@ -14,6 +14,11 @@ namespace
 constexpr double kRate = 48000.0;
 constexpr int kBlock = 512;
 
+// After released voices go idle, the shared DC blocker (06-voices.md § Output stage) decays smoothly
+// instead of being cut, so the output is below −100 dBFS rather than exactly 0. Hard cuts (All Sound
+// Off, Panic) still give exact zeros.
+constexpr float kReleasedSilence = 1.0e-5f;
+
 struct Prepared
 {
     Prepared()
@@ -116,7 +121,7 @@ TEST_CASE ("Processor: All Sound Off cuts, All Notes Off releases", "[plugin][pr
     REQUIRE (peak (f.run (0.3)) > 0.0f); // held by the pedal
 
     process (f.processor, kBlock, { { MidiMessage::allNotesOff (1), 0 } });
-    REQUIRE (peak (f.run (0.6)) == 0.0f); // 0.2 s amp release is idle by ~0.33 s; sustain state cleared
+    REQUIRE (peak (f.run (0.6)) < kReleasedSilence); // 0.2 s amp release is idle by ~0.33 s; sustain state cleared
 }
 
 TEST_CASE ("Processor: sustain pedal holds notes until pedal up", "[plugin][processor]")
@@ -128,7 +133,7 @@ TEST_CASE ("Processor: sustain pedal holds notes until pedal up", "[plugin][proc
     REQUIRE (peak (f.run (0.5)) > 0.0f);
 
     process (f.processor, kBlock, { { MidiMessage::controllerEvent (1, 64, 0), 0 } });
-    REQUIRE (peak (f.run (0.6)) == 0.0f);
+    REQUIRE (peak (f.run (0.6)) < kReleasedSilence);
 }
 
 TEST_CASE ("Processor: channel filter 3 ignores channel 1", "[plugin][processor]")
@@ -303,7 +308,7 @@ TEST_CASE ("Processor: on-screen/computer keyboard notes play on the active chan
     f.processor.injectNoteOff (60);
     process (f.processor, kBlock);
     REQUIRE_FALSE (f.processor.isNoteHeld (60));
-    REQUIRE (peak (f.run (0.6)) == 0.0f);
+    REQUIRE (peak (f.run (0.6)) < kReleasedSilence);
 }
 
 TEST_CASE ("Processor: MIDI monitor records messages before the channel filter", "[plugin][processor]")

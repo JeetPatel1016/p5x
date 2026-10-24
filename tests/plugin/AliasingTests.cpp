@@ -1,6 +1,7 @@
 // P5X — Copyright (c) 2026 Jeet Patel. Licensed under GPL-3.0-or-later.
-// 02-oscillators.md § Tests: saw aliasing through the real 2× downsampler. The threshold is what the
-// specified model (2-sample PolyBLEP at 2×) measures, recorded in DECISIONS.md.
+// 02-oscillators.md § Tests: saw aliasing through the real downsampler (2×, and 4× for HQ mode). The
+// thresholds are what the
+// specified model (2-sample PolyBLEP) measures at each factor, recorded in DECISIONS.md.
 #include "dsp/Oscillator.h"
 #include "support/Spectrum.h"
 
@@ -13,18 +14,18 @@
 namespace
 {
 constexpr double kHostRate = 48000.0;
-constexpr double kInternalRate = 96000.0;
 constexpr size_t kFftSize = 65536;
 
 // Worst aliasing component (dB relative to the fundamental) below host Nyquist.
-double worstAliasDb (double freq)
+double worstAliasDb (double freq, int factor)
 {
-    juce::dsp::Oversampling<float> os (1, 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true, false);
+    juce::dsp::Oversampling<float> os (1, factor == 4 ? 2 : 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+                                       true, false);
     constexpr int block = 512;
     os.initProcessing (block);
 
     p5x::dsp::Oscillator osc;
-    osc.prepare (kInternalRate);
+    osc.prepare (kHostRate * factor);
     osc.reset (0.0);
 
     std::vector<float> zeros (block, 0.0f), hostOut;
@@ -77,11 +78,26 @@ TEST_CASE ("Saw aliasing from 1 kHz to C8 through the 2x downsampler", "[plugin]
 
     for (double f : { 1000.0, 1318.51, 1760.0, 2349.32, 3135.96, 4186.01 })
     {
-        const double db = worstAliasDb (f);
+        const double db = worstAliasDb (f, 2);
         std::printf ("saw %8.2f Hz: worst alias %.1f dB\n", f, db);
         overallWorst = std::max (overallWorst, db);
     }
 
     // Threshold from the measured model: worst case −53.8 dB at C8 (DECISIONS.md, milestone 2).
     REQUIRE (overallWorst < -52.0);
+}
+
+TEST_CASE ("Saw aliasing from 1 kHz to C8 through the 4x downsampler (HQ mode)", "[plugin][osc][aliasing][hq]")
+{
+    double overallWorst = -300.0;
+
+    for (double f : { 1000.0, 1318.51, 1760.0, 2349.32, 3135.96, 4186.01 })
+    {
+        const double db = worstAliasDb (f, 4);
+        std::printf ("saw %8.2f Hz at 4x: worst alias %.1f dB\n", f, db);
+        overallWorst = std::max (overallWorst, db);
+    }
+
+    // Threshold from the measured model: worst case −72.8 dB at 3.1 kHz (DECISIONS.md, milestone 4).
+    REQUIRE (overallWorst < -70.0);
 }
